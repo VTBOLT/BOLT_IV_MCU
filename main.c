@@ -34,6 +34,11 @@
 *
 * MSP432 empty main.c template
 *
+******************************************************************************
+*
+* This file is the empty main for the BOLT MCU. See can_example.c for details
+* when implementing CAN functionality.
+*
 ******************************************************************************/
 
 #include "msp.h"

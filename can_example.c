@@ -82,6 +82,14 @@
  *            |                  |
  *
  * Author: David Lara
+*******************************************************************************
+*
+* This is the example file for CAN. To use, change FILE_IN_USE to 1, however,
+* since this has a main, you cannot compile both this and main.c. To test CAN
+* functionality on its own, use the demo project
+* can_multimessage_transmit_receive_MSP_EXP432E401Y_nortos_ccs, found in the
+* MSPE4 SDK.
+*
 *******************************************************************************/
 #define FILE_IN_USE 0
 
