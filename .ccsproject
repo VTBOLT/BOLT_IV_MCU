@@ -8,11 +8,10 @@
 	<codegenToolVersion value="18.1.3.LTS"/>
 	<isElfFormat value="true"/>
 	<connection value="common/targetdb/connections/TIXDS110_Connection.xml"/>
-	<rts value=""/>
+	<linkerCommandFile value="msp432e401y.cmd"/>
+	<rts value="libc.a"/>
 	<createSlaveProjects value=""/>
-	<ignoreDefaultDeviceSettings value="true"/>
-	<ignoreDefaultCCSSettings value="true"/>
-	<templateProperties value="id=can_multimessage_transmit_receive_MSP_EXP432E401Y_nortos_ccs.projectspec.can_multimessage_transmit_receive_MSP_EXP432E401Y_nortos_ccs,buildProfile=release,isHybrid=true"/>
-	<origin value="C:\ti\simplelink_msp432e4_sdk_2_30_00_14\examples\nortos\MSP_EXP432E401Y\driverlib\can_multimessage_transmit_receive\ccs\can_multimessage_transmit_receive_MSP_EXP432E401Y_nortos_ccs.projectspec"/>
-	<filesToOpen value=""/>
+	<templateProperties value="id=com.ti.common.project.core.emptyProjectWithMainTemplate_msp432"/>
+	<filesToOpen value="main.c"/>
+	<isTargetManual value="false"/>
 </projectOptions>
