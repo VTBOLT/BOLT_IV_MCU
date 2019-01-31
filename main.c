@@ -70,6 +70,7 @@ int main(void)
     while (1)
     {
         // test comment
+        // this updates aux-battery-ADC, not master
 
     }
 }
