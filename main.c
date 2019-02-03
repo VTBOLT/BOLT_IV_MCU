@@ -66,11 +66,50 @@
 
 int main(void)
 {
+    uint32_t allSysPorts[GPIO_PORTS] = {SYSCTL_PERIPH_GPIOA, SYSCTL_PERIPH_GPIOB, SYSCTL_PERIPH_GPIOC, SYSCTL_PERIPH_GPIOD,
+                                        SYSCTL_PERIPH_GPIOE, SYSCTL_PERIPH_GPIOF, SYSCTL_PERIPH_GPIOG, SYSCTL_PERIPH_GPIOH,
+                                        SYSCTL_PERIPH_GPIOJ, SYSCTL_PERIPH_GPIOK, SYSCTL_PERIPH_GPIOL, SYSCTL_PERIPH_GPIOM,
+                                        SYSCTL_PERIPH_GPION, SYSCTL_PERIPH_GPIOP, SYSCTL_PERIPH_GPIOQ};
 
+
+    int i = 0;
+    for (i = 0; i < GPIO_PORTS; ++i) {
+        MAP_SysCtlPeripheralEnable(allSysPorts[i]);
+        while(!MAP_SysCtlPeripheralReady(allSysPorts[i])){};
+    }
+
+
+    // Enable the GPIO Pins for Ignition and Accessory Tx as outputs.
+    // (Pins PM0 and PM1, respectively) Then, set them to HIGH.
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTM_BASE, (GPIO_PIN_0 | GPIO_PIN_1));
+    MAP_GPIOPinWrite(GPIO_PORTM_BASE, (GPIO_PIN_0 | GPIO_PIN_1));
+
+    // Enable the GPIO Pins for the Ignition and Accessory relays as outputs.
+    // (Pins PH1 and PK6, respectively) Then, set them to LOW.
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTH_BASE, GPIO_PIN_1);
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTK_BASE, GPIO_PIN_6);
+    MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_1, ~GPIO_PIN_1);
+    MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, ~GPIO_PIN_6);
+
+    // Enable the GPIO pin for Ignition and Accessory Rx as inputs.
+    // (Pins PM2 and PH0, respectively)
+    // Then, enable the MCU's pull-down resistors on each.
+    MAP_GPIOPinTypeGPIOInput(GPIO_PORTM_BASE, GPIO_PIN_2);
+    MAP_GPIOPinTypeGPIOInput(GPIO_PORTH_BASE, GPIO_PIN_0);
+    GPIOM->PDR |= GPIO_PIN_2;
+    GPIOH->PDR |= GPIO_PIN_0;
+
+    // Loop forever.
     while (1)
     {
-        // test comment
-        // this updates aux-battery-ADC, not master
+
+        // If PL1 reads a digital HIGH, then output a digital HIGH to PL2.
+        // Otherwise, output a digital LOW
+        if ( MAP_GPIOPinRead(GPIO_PORTL_BASE, GPIO_PIN_1) == GPIO_PIN_1){
+            MAP_GPIOPinWrite(GPIO_PORTL_BASE, GPIO_PIN_2, GPIO_PIN_2);
+        } else {
+            MAP_GPIOPinWrite(GPIO_PORTL_BASE, GPIO_PIN_2, ~(GPIO_PIN_2));
+        }
 
     }
 }
