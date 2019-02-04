@@ -64,6 +64,11 @@
 
 #define GPIO_PORTS 15
 
+// Forward Declarations
+void IgnitAccessEnable(void);
+void IgnitPoll(void);
+void AccessPoll(void);
+
 int main(void)
 {
     uint32_t allSysPorts[GPIO_PORTS] = {SYSCTL_PERIPH_GPIOA, SYSCTL_PERIPH_GPIOB, SYSCTL_PERIPH_GPIOC, SYSCTL_PERIPH_GPIOD,
@@ -71,14 +76,27 @@ int main(void)
                                         SYSCTL_PERIPH_GPIOJ, SYSCTL_PERIPH_GPIOK, SYSCTL_PERIPH_GPIOL, SYSCTL_PERIPH_GPIOM,
                                         SYSCTL_PERIPH_GPION, SYSCTL_PERIPH_GPIOP, SYSCTL_PERIPH_GPIOQ};
 
-
     int i = 0;
     for (i = 0; i < GPIO_PORTS; ++i) {
         MAP_SysCtlPeripheralEnable(allSysPorts[i]);
         while(!MAP_SysCtlPeripheralReady(allSysPorts[i])){};
     }
 
+    IgnitAccessEnable();
 
+    // Loop forever.
+    while (1)
+    {
+        IgnitPoll();
+        AccessPoll();
+
+    }
+}
+
+
+// Enables all MCU pins involved in the ignition and accessory switches
+void IgnitAccessEnable(void)
+{
     // Enable the GPIO Pins for Ignition and Accessory Tx as outputs.
     // (Pins PM0 and PM1, respectively) Then, set them to HIGH.
     MAP_GPIOPinTypeGPIOOutput(GPIO_PORTM_BASE, (GPIO_PIN_0 | GPIO_PIN_1));
@@ -98,18 +116,30 @@ int main(void)
     MAP_GPIOPinTypeGPIOInput(GPIO_PORTH_BASE, GPIO_PIN_0);
     GPIOM->PDR |= GPIO_PIN_2;
     GPIOH->PDR |= GPIO_PIN_0;
+}
 
-    // Loop forever.
-    while (1)
-    {
 
-        // If PL1 reads a digital HIGH, then output a digital HIGH to PL2.
-        // Otherwise, output a digital LOW
-        if ( MAP_GPIOPinRead(GPIO_PORTL_BASE, GPIO_PIN_1) == GPIO_PIN_1){
-            MAP_GPIOPinWrite(GPIO_PORTL_BASE, GPIO_PIN_2, GPIO_PIN_2);
-        } else {
-            MAP_GPIOPinWrite(GPIO_PORTL_BASE, GPIO_PIN_2, ~(GPIO_PIN_2));
-        }
+// Poll if ignition Rx is HIGH. If so, output HIGH to ignition relay.
+// Else, keep output to ignition relay LOW.
+void IgnitPoll(void)
+{
+    // Ignition switch, Rx: PM2, Relay Output: PH1
+    if ( MAP_GPIOPinRead(GPIO_PORTM_BASE, GPIO_PIN_2) == GPIO_PIN_2) {
+        MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_1, GPIO_PIN_1);
+    } else {
+        MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_1, ~(GPIO_PIN_1));
+    }
+}
 
+
+// Poll if accessory Rx is HIGH. If so, output HIGH to accessory relay.
+// Else, keep output to accessory relay LOW.
+void AccessPoll(void)
+{
+    // Accessory switch, Rx: PH0, Relay Output: PK6
+    if ( MAP_GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_0) == GPIO_PIN_0) {
+        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, GPIO_PIN_6);
+    } else {
+        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, ~(GPIO_PIN_6));
     }
 }
