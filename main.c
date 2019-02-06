@@ -98,9 +98,11 @@ int main(void)
 void IgnitAccessEnable(void)
 {
     // Enable the GPIO Pins for Ignition and Accessory Tx as outputs.
-    // (Pins PM0 and PM1, respectively) Then, set them to HIGH.
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTM_BASE, (GPIO_PIN_0 | GPIO_PIN_1));
-    MAP_GPIOPinWrite(GPIO_PORTM_BASE, (GPIO_PIN_0 | GPIO_PIN_1));
+    // (Pins PA7 and PM7, respectively) Then, set them to HIGH.
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTA_BASE, GPIO_PIN_7);
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTM_BASE, GPIO_PIN_7);
+    MAP_GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_7, GPIO_PIN_7);
+    MAP_GPIOPinWrite(GPIO_PORTM_BASE, GPIO_PIN_7, GPIO_PIN_7);
 
     // Enable the GPIO Pins for the Ignition and Accessory relays as outputs.
     // (Pins PH1 and PK6, respectively) Then, set them to LOW.
@@ -110,12 +112,10 @@ void IgnitAccessEnable(void)
     MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, ~GPIO_PIN_6);
 
     // Enable the GPIO pin for Ignition and Accessory Rx as inputs.
-    // (Pins PM2 and PH0, respectively)
+    // (Pins PP3 and PP5, respectively)
     // Then, enable the MCU's pull-down resistors on each.
-    MAP_GPIOPinTypeGPIOInput(GPIO_PORTM_BASE, GPIO_PIN_2);
-    MAP_GPIOPinTypeGPIOInput(GPIO_PORTH_BASE, GPIO_PIN_0);
-    GPIOM->PDR |= GPIO_PIN_2;
-    GPIOH->PDR |= GPIO_PIN_0;
+    MAP_GPIOPinTypeGPIOInput(GPIO_PORTP_BASE, (GPIO_PIN_3 | GPIO_PIN_5));
+    GPIOP->PDR |= (GPIO_PIN_3 | GPIO_PIN_5);
 }
 
 
@@ -123,8 +123,8 @@ void IgnitAccessEnable(void)
 // Else, keep output to ignition relay LOW.
 void IgnitPoll(void)
 {
-    // Ignition switch, Rx: PM2, Relay Output: PH1
-    if ( MAP_GPIOPinRead(GPIO_PORTM_BASE, GPIO_PIN_2) == GPIO_PIN_2) {
+    // Ignition switch, Rx: PP3, Relay Output: PH1
+    if ( MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3) == GPIO_PIN_3) {
         MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_1, GPIO_PIN_1);
     } else {
         MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_1, ~(GPIO_PIN_1));
@@ -136,8 +136,8 @@ void IgnitPoll(void)
 // Else, keep output to accessory relay LOW.
 void AccessPoll(void)
 {
-    // Accessory switch, Rx: PH0, Relay Output: PK6
-    if ( MAP_GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_0) == GPIO_PIN_0) {
+    // Accessory switch, Rx: PP5, Relay Output: PK6
+    if ( MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_5) == GPIO_PIN_5) {
         MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, GPIO_PIN_6);
     } else {
         MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, ~(GPIO_PIN_6));
