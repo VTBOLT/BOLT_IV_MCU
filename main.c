@@ -64,10 +64,21 @@
 
 #define GPIO_PORTS 15
 
+// State and event names
+typedef enum states { PREPUMP, PREIGNIT, POSTIGNIT, MAX_STATES } states;
+
 // Forward Declarations
 void IgnitAccessEnable(void);
-void IgnitPoll(void);
-void AccessPoll(void);
+uint32_t IgnitPoll(void);
+uint32_t AccessPoll(void);
+
+// State Subroutines
+states prePump (void);
+states preIgnit (void);
+states postIgnit (void);
+
+// Lookup table for subroutine of a state
+states (*const state_array [MAX_STATES]) (void) = { prePump, preIgnit, postIgnit };
 
 int main(void)
 {
@@ -84,11 +95,15 @@ int main(void)
 
     IgnitAccessEnable();
 
+    states cur_state = PREPUMP;
+
     // Loop forever.
     while (1)
     {
-        IgnitPoll();
-        AccessPoll();
+
+        if( (cur_state >= 0) && (cur_state < MAX_STATES) ) {
+            cur_state = state_array[cur_state]();
+        }
 
     }
 }
@@ -121,25 +136,69 @@ void IgnitAccessEnable(void)
 
 // Poll if ignition Rx is HIGH. If so, output HIGH to ignition relay.
 // Else, keep output to ignition relay LOW.
-void IgnitPoll(void)
+// Return state of ignition Rx
+uint32_t IgnitPoll(void)
 {
+    uint32_t input = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3);
+
     // Ignition switch, Rx: PP3, Relay Output: PH1
-    if ( MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3) == GPIO_PIN_3) {
+    if ( input == GPIO_PIN_3) {
         MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_1, GPIO_PIN_1);
     } else {
         MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_1, ~(GPIO_PIN_1));
     }
+
+    return input;
+
 }
 
 
 // Poll if accessory Rx is HIGH. If so, output HIGH to accessory relay.
 // Else, keep output to accessory relay LOW.
-void AccessPoll(void)
+// Return state of accessory Rx
+uint32_t AccessPoll(void)
 {
+    uint32_t input = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_5);
+
     // Accessory switch, Rx: PP5, Relay Output: PK6
-    if ( MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_5) == GPIO_PIN_5) {
+    if (input == GPIO_PIN_5) {
         MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, GPIO_PIN_6);
     } else {
         MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, ~(GPIO_PIN_6));
     }
+
+    return input;
+
 }
+
+// Subroutine for PREPUMP state.
+// Checks if accessory switch is closed.
+// Changes relay output if so and returns next state.
+states prePump (void)
+{
+    uint32_t accessStatus = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_5);
+    while(accessStatus != GPIO_PIN_5)
+    {
+       accessStatus = AccessPoll();
+    }
+
+    return PREIGNIT;
+}
+
+// Subroutine for PREIGNIT state.
+// Checks if accessory switch is opened or ignition switch is close.
+// Changes relay output in response to one of the events and returns next state.
+states preIgnit (void)
+{
+    uint32_t accessStatus = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_5);
+    uint32_t ignitStatus = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3);
+    while(accessStatus == GPIO_PIN_5 && ignitStatus == ~GPIO_PIN_3)
+    {
+        accessStatus = AccessPoll();
+        ignitStatus = IgnitPoll();
+
+    }
+
+
+}
+
