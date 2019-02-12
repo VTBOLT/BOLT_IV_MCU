@@ -82,6 +82,7 @@ states (*const state_array [MAX_STATES]) (void) = { prePump, preIgnit, postIgnit
 
 int main(void)
 {
+    // delete
     uint32_t allSysPorts[GPIO_PORTS] = {SYSCTL_PERIPH_GPIOA, SYSCTL_PERIPH_GPIOB, SYSCTL_PERIPH_GPIOC, SYSCTL_PERIPH_GPIOD,
                                         SYSCTL_PERIPH_GPIOE, SYSCTL_PERIPH_GPIOF, SYSCTL_PERIPH_GPIOG, SYSCTL_PERIPH_GPIOH,
                                         SYSCTL_PERIPH_GPIOJ, SYSCTL_PERIPH_GPIOK, SYSCTL_PERIPH_GPIOL, SYSCTL_PERIPH_GPIOM,
@@ -136,7 +137,7 @@ void IgnitAccessEnable(void)
 
 // Poll if ignition Rx is HIGH. If so, output HIGH to ignition relay.
 // Else, keep output to ignition relay LOW.
-// Return state of ignition Rx
+// Return state of ignition Rx as bit packed byte
 uint32_t IgnitPoll(void)
 {
     uint32_t input = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3);
@@ -155,7 +156,7 @@ uint32_t IgnitPoll(void)
 
 // Poll if accessory Rx is HIGH. If so, output HIGH to accessory relay.
 // Else, keep output to accessory relay LOW.
-// Return state of accessory Rx
+// Return state of accessory Rx as bit packed byte
 uint32_t AccessPoll(void)
 {
     uint32_t input = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_5);
@@ -192,13 +193,33 @@ states preIgnit (void)
 {
     uint32_t accessStatus = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_5);
     uint32_t ignitStatus = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3);
+
+    // while ACCESS ON, IGNIT OFF
     while(accessStatus == GPIO_PIN_5 && ignitStatus == ~GPIO_PIN_3)
     {
         accessStatus = AccessPoll();
         ignitStatus = IgnitPoll();
-
     }
 
+    // Decides which state to return
+    // One of 4 combinations of access Rx and ignit Rx
+    // GPIO_PIN_5 is  00001000 and GPIO_PIN_3 00000010
+    switch (accessStatus | ignitStatus )
+    {
+        // ACCESS ON, IGNIT ON
+        case (GPIO_PIN_5 | GPIO_PIN_3):
+            return POSTIGNIT;
+            break;
 
+        // ACCESS OFF, IGNIT OFF
+        case (~GPIO_PIN_5 | ~GPIO_PIN_3):
+            return PREPUMP;
+            break;
+
+        // ACCESS OFF, IGNIT ON (pump must be on,
+        default:
+            return PREPUMP;
+            break;
+    }
 }
 
