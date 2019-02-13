@@ -10,7 +10,6 @@ GEN_OPTS__FLAG :=
 GEN_CMDS__FLAG := 
 
 ORDERED_OBJS += \
-"./can_example.obj" \
 "./main.obj" \
 "./startup_msp432e401y_ccs.obj" \
 "./system_msp432e401y.obj" \
@@ -158,8 +157,8 @@ BOLT_IV_MCU.hex: $(EXE_OUTPUTS)
 # Other Targets
 clean:
 	-$(RM) $(BIN_OUTPUTS__QUOTED)$(EXE_OUTPUTS__QUOTED)
-	-$(RM) "can_example.obj" "main.obj" "startup_msp432e401y_ccs.obj" "system_msp432e401y.obj" "uartstdio.obj" 
-	-$(RM) "can_example.d" "main.d" "startup_msp432e401y_ccs.d" "system_msp432e401y.d" "uartstdio.d" 
+	-$(RM) "main.obj" "startup_msp432e401y_ccs.obj" "system_msp432e401y.obj" "uartstdio.obj" 
+	-$(RM) "main.d" "startup_msp432e401y_ccs.d" "system_msp432e401y.d" "uartstdio.d" 
 	-@echo 'Finished clean'
 	-@echo ' '
 

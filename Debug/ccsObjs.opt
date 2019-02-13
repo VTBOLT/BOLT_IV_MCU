@@ -1,1 +1,1 @@
-"./can_example.obj" "./main.obj" "./startup_msp432e401y_ccs.obj" "./system_msp432e401y.obj" "./uartstdio.obj" "../msp432e401y.cmd" -llibc.a 
+"./main.obj" "./startup_msp432e401y_ccs.obj" "./system_msp432e401y.obj" "./uartstdio.obj" "../msp432e401y.cmd" -llibc.a 

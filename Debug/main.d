@@ -57,6 +57,8 @@ main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/dr
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/udma.h
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/usb.h
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/watchdog.h
+main.obj: C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/stdio.h
+main.obj: C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/stdarg.h
 
 ../main.c: 
 C:/ti/ccs810/ccsv8/ccs_base/arm/include/msp.h: 
@@ -115,3 +117,5 @@ C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/ua
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/udma.h: 
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/usb.h: 
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/watchdog.h: 
+C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/stdio.h: 
+C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/stdarg.h: 
