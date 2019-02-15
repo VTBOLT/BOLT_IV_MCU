@@ -60,34 +60,30 @@
 
 /* Standard driverlib include - can be more specific if needed */
 #include <ti/devices/msp432e4/driverlib/driverlib.h>
-
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
 
 uint32_t systemClock;
 
+// State names
+typedef enum states { ACC, IGNIT, MAX_STATES } states;
+
 // Function prototypes
 void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
 void auxADCSetup();
 uint32_t auxADCSend(uint32_t* auxBatVoltage);
 void UART7Setup();
-
-// State and event names
-typedef enum states { PREPUMP, PREIGNIT, POSTIGNIT, MAX_STATES } states;
-
-// Forward Declarations
 void switchesSetup(void);
-uint32_t ignitionPoll(void);
-uint32_t accessoryPoll(void);
+uint32_t ignitPoll(void);
+uint32_t accPoll(void);
 
 // State Subroutines
-states prePump (void);
-states preIgnit (void);
-states postIgnit (void);
+states acc (void);
+states ignit (void);
 
 // Lookup array for subroutine of a state
-states (*const state_array [MAX_STATES]) (void) = { prePump, preIgnit, postIgnit };
+states (*const state_array [MAX_STATES]) (void) = { acc, ignit };
 
 int main(void)
 {
@@ -98,7 +94,7 @@ int main(void)
 
     uint32_t auxBatVoltage[1];
     uint32_t auxBatAdjusted; //no decimal, accurate value
-    states cur_state = PREPUMP;
+    states cur_state = ACC;
 
     auxADCSetup();
     UART7Setup();
@@ -108,13 +104,14 @@ int main(void)
     // Loop forever.
     while (1)
     {
-        auxBatAdjusted = auxADCSend(auxBatVoltage); // what does this do?
+        // In Volts??
+        auxBatAdjusted = auxADCSend(auxBatVoltage);
 
         if(cur_state < MAX_STATES) {
             cur_state = state_array[cur_state]();
         }
 
-        MAP_SysCtlDelay(systemClock/2); // what does this do?
+        MAP_SysCtlDelay(systemClock/2);
     }
 }
 
@@ -135,51 +132,56 @@ void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count)
 
 void switchesSetup(void)
 {
-    /* Enables all MCU pins involved in the ignition and accessory switches */
+    /* Enables pins for ACC Tx/Rx, IGN Tx/Rx and the ACC/IGN relays */
 
 
     /* Enable clock peripherals used
-    (A, M, H and K) */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
-    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA)){};
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
-    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM)){};
+    (H, K, M, P, Q) */
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOH);
     while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOH)){};
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOK);
     while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOK)){};
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
+    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM)){};
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOP);
+    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOP)){};
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOQ);
+    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOQ)){};
+
 
     /*Enable the GPIO Pins for Ignition and Accessory Tx as outputs.
-    ( PA7 and PM7, respectively) */
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTA_BASE, GPIO_PIN_7);
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTM_BASE, GPIO_PIN_7);
+    ( PM6 and PQ1, respectively) */
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTM_BASE, GPIO_PIN_6);
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTQ_BASE, GPIO_PIN_1);
 
     /* Set them to HIGH */
-    MAP_GPIOPinWrite(GPIO_PORTA_BASE, GPIO_PIN_7, GPIO_PIN_7);
-    MAP_GPIOPinWrite(GPIO_PORTM_BASE, GPIO_PIN_7, GPIO_PIN_7);
+    MAP_GPIOPinWrite(GPIO_PORTM_BASE, GPIO_PIN_6, GPIO_PIN_6);
+    MAP_GPIOPinWrite(GPIO_PORTQ_BASE, GPIO_PIN_1, GPIO_PIN_1);
 
     /* Enable the GPIO Pins for the Ignition and Accessory relays as outputs.
-    (PH1 and PK6, respectively) */
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTH_BASE, GPIO_PIN_1);
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTK_BASE, GPIO_PIN_6);
+    (PH0 and PK4, respectively) */
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTH_BASE, GPIO_PIN_0);
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTK_BASE, GPIO_PIN_4);
 
     /* Then, set them to LOW */
-    MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_1, ~GPIO_PIN_1);
-    MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, ~GPIO_PIN_6);
+    MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~GPIO_PIN_0);
+    MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~GPIO_PIN_4);
 
     /* Enable the GPIO pins for Ignition and Accessory Rx as inputs.
-    (PP3 and PP5, respectively) */
-    MAP_GPIOPinTypeGPIOInput(GPIO_PORTP_BASE, (GPIO_PIN_3 | GPIO_PIN_5));
+    (PP3 and PH1, respectively) */
+    MAP_GPIOPinTypeGPIOInput(GPIO_PORTP_BASE, GPIO_PIN_3);
+    MAP_GPIOPinTypeGPIOInput(GPIO_PORTH_BASE, GPIO_PIN_1);
 
-    /* Then, enable the MCU's pull-down resistors on each. */
-    GPIOP->PDR |= (GPIO_PIN_3 | GPIO_PIN_5);
+    /* Then, enable the MCU's pull-down resistors on each to prevent noise */
+    GPIOP->PDR |= GPIO_PIN_3;
+    GPIOH->PDR |= GPIO_PIN_1;
 }
 
-uint32_t ignitionPoll(void)
+uint32_t ignitPoll(void)
 {
     /* Poll if ignition Rx is HIGH. If so, output HIGH to ignition relay.
     Else, keep output to ignition relay LOW.
-    Return state of ignition Rx as bit packed byte */
+    Return whether ignition Rx reads HIGH or LOW as bit packed byte */
 
 
     uint32_t input = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3);
@@ -197,11 +199,11 @@ uint32_t ignitionPoll(void)
 
 
 
-uint32_t accessoryPoll(void)
+uint32_t accPoll(void)
 {
     /* Poll if accessory Rx is HIGH. If so, output HIGH to accessory relay.
     Else, keep output to accessory relay LOW.
-    Return state of accessory Rx as bit packed byte */
+    Return whether accessory Rx reads HIGH or LOW as bit packed byte */
 
     uint32_t input = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_5);
 
@@ -217,77 +219,55 @@ uint32_t accessoryPoll(void)
 }
 
 
-states prePump (void)
+states acc (void)
 {
-    /* Subroutine for PREPUMP state.
-    Checks if accessory switch is closed.
-    Changes relay output if so and returns next state.*/
+    /* Subroutine for ACC state */
 
-    uint32_t accessStatus = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_5);
-    while(accessStatus != GPIO_PIN_5)
+    uint32_t accStatus = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_5);
+    while(accStatus != GPIO_PIN_5)
     {
-       accessStatus = AccessPoll();
+       accStatus = accPoll();
     }
 
-    return PREIGNIT;
+    return IGNIT;
 }
 
 
-states preIgnit (void)
+states ignit (void)
 {
-    /* Subroutine for PREIGNIT state.
-    Checks if accessory switch is opened or ignition switch is close.
-    Changes relay output in response to one of the events and returns next state */
+    /* Subroutine for IGNIT state. */
 
-
-    uint32_t accessStatus = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_5);
+    uint32_t accStatus = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_5);
     uint32_t ignitStatus = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3);
 
     // while ACCESS ON, IGNIT OFF
-    while(accessStatus == GPIO_PIN_5 && ignitStatus == ~GPIO_PIN_3)
+    while(accStatus == GPIO_PIN_5 && ignitStatus == ~GPIO_PIN_3)
     {
-        accessStatus = accessoryPoll();
-        ignitStatus = ignitionPoll();
+        accStatus = accPoll();
+        ignitStatus = ignitPoll();
     }
 
     // Decides which state to return
     // One of 4 combinations of access Rx and ignit Rx
     // GPIO_PIN_5 is  00001000 and GPIO_PIN_3 00000010
-    switch (accessStatus | ignitStatus )
+    switch (accStatus | ignitStatus )
     {
-        // ACCESS ON, IGNIT ON
+        // ACC RELAY ON, IGNIT RELAY ON
         case (GPIO_PIN_5 | GPIO_PIN_3):
-            return POSTIGNIT;
+            return IGNIT;
             break;
 
-        // ACCESS OFF, IGNIT OFF
+        // ACC RELAY OFF, IGNIT RELAY OFF
         case (~GPIO_PIN_5 | ~GPIO_PIN_3):
-            return PREPUMP;
+            return ACC;
             break;
 
-        // ACCESS OFF, IGNIT ON (pump must be on,
+        // ACC RELAY OFF, IGNIT RELAY ON
         default:
-            return PREPUMP;
+            return ACC;
             break;
     }
 }
-
-
-states postIgnit (void)
-{
-    /* Subroutine for PREPUMP state.
-    Checks if accessory switch is closed.
-    Changes relay output if so and returns next state. */
-
-
-    while(1)
-    {
-
-    }
-
-    return;
-}
-
 
 
 void auxADCSetup()

@@ -16,6 +16,12 @@ ORDERED_OBJS += \
 "./uartstdio.obj" \
 "../msp432e401y.cmd" \
 $(GEN_CMDS__FLAG) \
+-l"ti/display/lib/display.aem4f" \
+-l"ti/grlib/lib/ccs/m4f/grlib.a" \
+-l"third_party/spiffs/lib/ccs/m4f/spiffs.a" \
+-l"ti/drivers/lib/drivers_msp432e4.aem4f" \
+-l"third_party/fatfs/lib/ccs/m4f/fatfs.a" \
+-l"ti/devices/msp432e4/driverlib/lib/ccs/m4f/msp432e4_driverlib.a" \
 -llibc.a \
 
 -include ../makefile.init
@@ -143,7 +149,7 @@ all: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
 BOLT_IV_MCU.out: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
 	@echo 'Building target: "$@"'
 	@echo 'Invoking: ARM Linker'
-	"C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/bin/armcl" -mv7M4 --code_state=16 --float_support=FPv4SPD16 -me --advice:power=all --define=ccs --define=__MSP432E401Y__ -g --gcc --diag_warning=225 --diag_wrap=off --display_error_number --abi=eabi -z -m"BOLT_IV_MCU.map" --heap_size=0 --stack_size=512 -i"C:/ti/ccs810/ccsv8/ccs_base/arm/include" -i"C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/lib" -i"C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include" --reread_libs --diag_wrap=off --display_error_number --warn_sections --xml_link_info="BOLT_IV_MCU_linkInfo.xml" --rom_model -o "BOLT_IV_MCU.out" $(ORDERED_OBJS)
+	"C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/bin/armcl" -mv7M4 --code_state=16 --float_support=FPv4SPD16 -me --advice:power=all --define=ccs --define=__MSP432E401Y__ -g --gcc --diag_warning=225 --diag_wrap=off --display_error_number --abi=eabi -z -m"BOLT_IV_MCU.map" --heap_size=0 --stack_size=512 -i"C:/ti/ccs810/ccsv8/ccs_base/arm/include" -i"C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/lib" -i"C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include" -i"C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source" --reread_libs --diag_wrap=off --display_error_number --warn_sections --xml_link_info="BOLT_IV_MCU_linkInfo.xml" --rom_model -o "BOLT_IV_MCU.out" $(ORDERED_OBJS)
 	@echo 'Finished building target: "$@"'
 	@echo ' '
 
