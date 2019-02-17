@@ -104,7 +104,7 @@ int main(void)
     // Loop forever.
     while (1)
     {
-        // In Volts??
+
         auxBatAdjusted = auxADCSend(auxBatVoltage);
 
         if(cur_state < MAX_STATES) {
@@ -186,11 +186,11 @@ uint32_t ignitPoll(void)
 
     uint32_t input = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3);
 
-    // Ignition switch, Rx: PP3, Relay Output: PH1
+    // Ignition switch, Rx: PP3, Relay Output: PH0
     if ( input == GPIO_PIN_3) {
-        MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_1, GPIO_PIN_1);
+        MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, GPIO_PIN_0);
     } else {
-        MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_1, ~(GPIO_PIN_1));
+        MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~(GPIO_PIN_0));
     }
 
     return input;
@@ -205,13 +205,13 @@ uint32_t accPoll(void)
     Else, keep output to accessory relay LOW.
     Return whether accessory Rx reads HIGH or LOW as bit packed byte */
 
-    uint32_t input = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_5);
+    uint32_t input = MAP_GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_1);
 
-    // Accessory switch, Rx: PP5, Relay Output: PK6
-    if (input == GPIO_PIN_5) {
-        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, GPIO_PIN_6);
+    // Accessory switch, Rx: PH1, Relay Output: PK4
+    if (input == GPIO_PIN_1) {
+        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PIN_4);
     } else {
-        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, ~(GPIO_PIN_6));
+        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~(GPIO_PIN_4));
     }
 
     return input;
