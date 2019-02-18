@@ -66,24 +66,15 @@
 
 uint32_t systemClock;
 
-// State names
-typedef enum states { ACC, IGNIT, MAX_STATES } states;
-
 // Function prototypes
 void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
 void auxADCSetup();
 uint32_t auxADCSend(uint32_t* auxBatVoltage);
 void UART7Setup();
 void switchesSetup(void);
-uint32_t ignitPoll(void);
-uint32_t accPoll(void);
+void ignitPoll(void);
+void accPoll(void);
 
-// State Subroutines
-states acc (void);
-states ignit (void);
-
-// Lookup array for subroutine of a state
-states (*const state_array [MAX_STATES]) (void) = { acc, ignit };
 
 int main(void)
 {
@@ -94,7 +85,7 @@ int main(void)
 
     uint32_t auxBatVoltage[1];
     uint32_t auxBatAdjusted; //no decimal, accurate value
-    states cur_state = ACC;
+
 
     auxADCSetup();
     UART7Setup();
@@ -105,27 +96,9 @@ int main(void)
     while (1)
     {
 
-        auxBatAdjusted = auxADCSend(auxBatVoltage);
+        accPoll();
+        ignitPoll();
 
-        if(cur_state < MAX_STATES) {
-            cur_state = state_array[cur_state]();
-        }
-
-        MAP_SysCtlDelay(systemClock/2);
-    }
-}
-
-void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count)
-{
-    //
-    // Loop while there are more characters to send.
-    //
-    while(ui32Count--)
-    {
-        //
-        // Write the next character to the UART.
-        //
-        MAP_UARTCharPutNonBlocking(UART7_BASE, *pui8Buffer++);
     }
 }
 
@@ -177,98 +150,58 @@ void switchesSetup(void)
     GPIOH->PDR |= GPIO_PIN_1;
 }
 
-uint32_t ignitPoll(void)
+void accPoll(void)
+{
+    /* Poll if accessory Rx is HIGH. If so, output HIGH to accessory relay.
+    Else, keep output to accessory relay LOW.
+    Return whether accessory Rx reads HIGH or LOW as bit packed byte */
+
+    // bool input = MAP_GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_1);
+
+    // Accessory switch, Rx: PH1, Relay Output: PK4
+    if (MAP_GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_1) == GPIO_PIN_1) {
+        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PIN_4);
+    } else {
+        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~(GPIO_PIN_4));
+    }
+
+    // return input;
+
+}
+
+void ignitPoll(void)
 {
     /* Poll if ignition Rx is HIGH. If so, output HIGH to ignition relay.
     Else, keep output to ignition relay LOW.
     Return whether ignition Rx reads HIGH or LOW as bit packed byte */
 
 
-    uint32_t input = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3);
+    // bool input = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3);
 
     // Ignition switch, Rx: PP3, Relay Output: PH0
-    if ( input == GPIO_PIN_3) {
+    if (  MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3) == GPIO_PIN_3) {
         MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, GPIO_PIN_0);
     } else {
         MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~(GPIO_PIN_0));
     }
 
-    return input;
+    // return input;
 
 }
 
-
-
-uint32_t accPoll(void)
+void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count)
 {
-    /* Poll if accessory Rx is HIGH. If so, output HIGH to accessory relay.
-    Else, keep output to accessory relay LOW.
-    Return whether accessory Rx reads HIGH or LOW as bit packed byte */
-
-    uint32_t input = MAP_GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_1);
-
-    // Accessory switch, Rx: PH1, Relay Output: PK4
-    if (input == GPIO_PIN_1) {
-        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PIN_4);
-    } else {
-        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~(GPIO_PIN_4));
-    }
-
-    return input;
-
-}
-
-
-states acc (void)
-{
-    /* Subroutine for ACC state */
-
-    uint32_t accStatus = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_5);
-    while(accStatus != GPIO_PIN_5)
+    //
+    // Loop while there are more characters to send.
+    //
+    while(ui32Count--)
     {
-       accStatus = accPoll();
-    }
-
-    return IGNIT;
-}
-
-
-states ignit (void)
-{
-    /* Subroutine for IGNIT state. */
-
-    uint32_t accStatus = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_5);
-    uint32_t ignitStatus = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3);
-
-    // while ACCESS ON, IGNIT OFF
-    while(accStatus == GPIO_PIN_5 && ignitStatus == ~GPIO_PIN_3)
-    {
-        accStatus = accPoll();
-        ignitStatus = ignitPoll();
-    }
-
-    // Decides which state to return
-    // One of 4 combinations of access Rx and ignit Rx
-    // GPIO_PIN_5 is  00001000 and GPIO_PIN_3 00000010
-    switch (accStatus | ignitStatus )
-    {
-        // ACC RELAY ON, IGNIT RELAY ON
-        case (GPIO_PIN_5 | GPIO_PIN_3):
-            return IGNIT;
-            break;
-
-        // ACC RELAY OFF, IGNIT RELAY OFF
-        case (~GPIO_PIN_5 | ~GPIO_PIN_3):
-            return ACC;
-            break;
-
-        // ACC RELAY OFF, IGNIT RELAY ON
-        default:
-            return ACC;
-            break;
+        //
+        // Write the next character to the UART.
+        //
+        MAP_UARTCharPutNonBlocking(UART7_BASE, *pui8Buffer++);
     }
 }
-
 
 void auxADCSetup()
 {
