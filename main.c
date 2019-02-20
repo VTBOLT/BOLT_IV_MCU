@@ -60,7 +60,6 @@
 
 /* Standard driverlib include - can be more specific if needed */
 #include <ti/devices/msp432e4/driverlib/driverlib.h>
-
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -72,6 +71,10 @@ void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
 void auxADCSetup();
 uint32_t auxADCSend(uint32_t* auxBatVoltage);
 void UART7Setup();
+void switchesSetup(void);
+void ignitPoll(void);
+void accPoll(void);
+
 
 int main(void)
 {
@@ -82,15 +85,108 @@ int main(void)
 
     uint32_t auxBatVoltage[1];
     uint32_t auxBatAdjusted; //no decimal, accurate value
+
+
     auxADCSetup();
     UART7Setup();
+    switchesSetup();
 
+
+    // Loop forever.
     while (1)
     {
-        auxBatAdjusted = auxADCSend(auxBatVoltage);
 
-        MAP_SysCtlDelay(systemClock/2);
+        accPoll();
+        ignitPoll();
+
     }
+}
+
+
+void switchesSetup(void)
+{
+    /* Enables pins for ACC Tx/Rx, IGN Tx/Rx and the ACC/IGN relays */
+
+
+    /* Enable clock peripherals used
+    (H, K, M, P, Q) */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOH);
+    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOH)){};
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOK);
+    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOK)){};
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
+    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM)){};
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOP);
+    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOP)){};
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOQ);
+    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOQ)){};
+
+
+    /*Enable the GPIO Pins for Ignition and Accessory Tx as outputs.
+    ( PM6 and PQ1, respectively) */
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTM_BASE, GPIO_PIN_6);
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTQ_BASE, GPIO_PIN_1);
+
+    /* Set them to HIGH */
+    MAP_GPIOPinWrite(GPIO_PORTM_BASE, GPIO_PIN_6, GPIO_PIN_6);
+    MAP_GPIOPinWrite(GPIO_PORTQ_BASE, GPIO_PIN_1, GPIO_PIN_1);
+
+    /* Enable the GPIO Pins for the Ignition and Accessory relays as outputs.
+    (PH0 and PK4, respectively) */
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTH_BASE, GPIO_PIN_0);
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTK_BASE, GPIO_PIN_4);
+
+    /* Then, set them to LOW */
+    MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~GPIO_PIN_0);
+    MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~GPIO_PIN_4);
+
+    /* Enable the GPIO pins for Ignition and Accessory Rx as inputs.
+    (PP3 and PH1, respectively) */
+    MAP_GPIOPinTypeGPIOInput(GPIO_PORTP_BASE, GPIO_PIN_3);
+    MAP_GPIOPinTypeGPIOInput(GPIO_PORTH_BASE, GPIO_PIN_1);
+
+    /* Then, enable the MCU's pull-down resistors on each to prevent noise */
+    GPIOP->PDR |= GPIO_PIN_3;
+    GPIOH->PDR |= GPIO_PIN_1;
+}
+
+void accPoll(void)
+{
+    /* Poll if accessory Rx is HIGH. If so, output HIGH to accessory relay.
+    Else, keep output to accessory relay LOW.
+    Return whether accessory Rx reads HIGH or LOW as bit packed byte */
+
+    // bool input = MAP_GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_1);
+
+    // Accessory switch, Rx: PH1, Relay Output: PK4
+    if (MAP_GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_1) == GPIO_PIN_1) {
+        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PIN_4);
+    } else {
+        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~(GPIO_PIN_4));
+    }
+
+    // return input;
+
+}
+
+void ignitPoll(void)
+{
+    /* Poll if ignition Rx is HIGH. If so, output HIGH to ignition relay.
+    Else, keep output to ignition relay LOW.
+    Return whether ignition Rx reads HIGH or LOW as bit packed byte */
+
+
+    // bool input = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3);
+
+    // Ignition switch, Rx: PP3, Relay Output: PH0
+    if (  MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3) == GPIO_PIN_3) {
+        MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, GPIO_PIN_0);
+    } else {
+        MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~(GPIO_PIN_0));
+    }
+
+    // return input;
+
 }
 
 void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count)
