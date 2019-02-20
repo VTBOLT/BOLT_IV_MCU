@@ -64,7 +64,13 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+/* Configure system clock for 120 MHz */
 uint32_t systemClock;
+
+/* CAN variables */
+bool rxMsg = false;
+bool errFlag = false;
+uint32_t msgCount = 0;
 
 // Function prototypes
 void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
@@ -74,6 +80,8 @@ void UART7Setup();
 void switchesSetup(void);
 void ignitPoll(void);
 void accPoll(void);
+void canSetup(tCANMsgObject* message);
+void configureCAN();
 
 
 int main(void)
@@ -83,6 +91,11 @@ int main(void)
                                           SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480),
                                           120000000);
 
+    tCANMsgObject sCANMessage;
+    uint8_t msgDataIndex;
+    uint8_t msgData[8] = {0x00, 0x00, 0x00, 0x00,
+                          0x00, 0x00, 0x00, 0x00};
+
     uint32_t auxBatVoltage[1];
     uint32_t auxBatAdjusted; //no decimal, accurate value
 
@@ -90,18 +103,82 @@ int main(void)
     auxADCSetup();
     UART7Setup();
     switchesSetup();
+    canSetup(&sCANMessage);
 
 
     // Loop forever.
     while (1)
     {
+        //accPoll();
+        //ignitPoll();
 
-        accPoll();
-        ignitPoll();
+
 
     }
 }
 
+void canSetup(tCANMsgObject* message)
+{
+    /* Enable the clock to the GPIO Port J and wait for it to be ready */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOJ);
+    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOJ)))
+    {
+    }
+
+    /* Initialize the CAN */
+    configureCAN();
+
+    /* Initialize message object 1 to be able to receive any CAN message ID.
+     * In order to receive any CAN ID, the ID and mask must both be set to 0,
+     * and the ID filter enabled */
+    message->ui32MsgID = 0;
+    message->ui32MsgIDMask = 0;
+
+    /* Enable interrupt on RX and Filter ID */
+    message->ui32Flags = MSG_OBJ_RX_INT_ENABLE | MSG_OBJ_USE_ID_FILTER;
+
+    /* Size of message is 8 */
+    message->ui32MsgLen = 8; //could also be sizeof(msgData)
+
+    /* Load the message object into the CAN peripheral. Once loaded an
+     * interrupt will occur any time a CAN message is received. Use message
+     * object 1 for receiving messages */
+    MAP_CANMessageSet(CAN0_BASE, 1, message, MSG_OBJ_TYPE_RX);
+}
+
+void configureCAN(void)
+{
+    /* Configure the CAN and its pins PA0 and PA1 @ 500Kbps */
+
+    /* Enable the clock to the GPIO Port A and wait for it to be ready */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA)))
+    {
+    }
+
+    /* Enable CAN0 */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_CAN0);
+
+    /* Configure GPIO Pins for CAN mode */
+    MAP_GPIOPinConfigure(GPIO_PA0_CAN0RX);
+    MAP_GPIOPinConfigure(GPIO_PA1_CAN0TX);
+    MAP_GPIOPinTypeCAN(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+
+    /* Initialize the CAN controller */
+    MAP_CANInit(CAN0_BASE);
+
+    /* Set up the bit rate for the CAN bus.  CAN bus is set to 500 Kbps */
+    MAP_CANBitRateSet(CAN0_BASE, systemClock, 500000);
+
+    /* Enable interrupts on the CAN peripheral */
+    MAP_CANIntEnable(CAN0_BASE, CAN_INT_MASTER | CAN_INT_ERROR | CAN_INT_STATUS);
+
+    /* Enable the CAN interrupt */
+    MAP_IntEnable(INT_CAN0);
+
+    /* Enable the CAN for operation */
+    MAP_CANEnable(CAN0_BASE);
+}
 
 void switchesSetup(void)
 {
@@ -277,4 +354,47 @@ void UART7Setup()
     /* Configure UART for 57,600, 8-N-1 */
     MAP_UARTConfigSetExpClk(UART7_BASE, systemClock, 57600,
                             UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE);
+}
+
+void CAN0_IRQHandler(void)
+{
+    uint32_t canStatus;
+
+    /* Read the CAN interrupt status to find the cause of the interrupt */
+    canStatus = MAP_CANIntStatus(CAN0_BASE, CAN_INT_STS_CAUSE);
+
+    /* If the cause is a controller status interrupt, then get the status */
+    if(canStatus == CAN_INT_INTID_STATUS)
+    {
+        /* Read the controller status.  This will return a field of status
+         * error bits that can indicate various errors */
+        canStatus = MAP_CANStatusGet(CAN0_BASE, CAN_STS_CONTROL);
+
+        /* Set a flag to indicate some errors may have occurred */
+        errFlag = true;
+    }
+
+    /* Check if the cause is message object 1, which what we are using for
+     * receiving messages */
+    else if(canStatus == 1)
+    {
+        /* Getting to this point means that the RX interrupt occurred on
+         * message object 1, and the message RX is complete.  Clear the
+         * message object interrupt */
+        MAP_CANIntClear(CAN0_BASE, 1);
+
+        /* Increment a counter to keep track of how many messages have been
+         * sent. In a real application this could be used to set flags to
+         * indicate when a message is sent */
+        msgCount++;
+
+        /* Set flag to indicate received message is pending */
+        rxMsg = true;
+
+        /* Since the message was sent, clear any error flags */
+        errFlag = false;
+    }
+    else
+    {
+    }
 }
