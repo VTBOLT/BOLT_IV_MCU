@@ -66,14 +66,16 @@
 
 uint32_t systemClock;
 
+typedef enum states { PCB, ACC, IGN, MAX_STATES } states_t;
+
 // Function prototypes
 void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
 void auxADCSetup();
 uint32_t auxADCSend(uint32_t* auxBatVoltage);
 void UART7Setup();
 void switchesSetup(void);
-void ignitPoll(void);
-void accPoll(void);
+bool ignitPoll(void);
+bool accPoll(void);
 
 
 int main(void)
@@ -91,14 +93,64 @@ int main(void)
     UART7Setup();
     switchesSetup();
 
+    states_t present = PCB;
 
     // Loop forever.
     while (1)
     {
 
-        accPoll();
-        ignitPoll();
+        switch(present)
+        {
 
+        /* ACC state of FSM */
+        case ACC:
+            auxBatAdjusted = auxADCSend(auxBatVoltage);
+
+            /* auxBat voltage has priority? */
+            if (auxBatAdjusted <= 1200) {
+
+                present = PCB;
+
+            } else if (accPoll()) {
+
+                present = PCB;
+
+            } else if (ignitPoll()){
+
+                present = IGN;
+            }
+            break;
+
+        /* IGN state of FSM */
+        case IGN:
+            auxBatAdjusted = auxADCSend(auxBatVoltage);
+
+            if (auxBatAdjusted <= 1200) {
+
+                present = ACC;
+
+            } else if (/*Low pump current*/) {
+
+                present = ACC;
+
+            } else if (/*BMS discharge enable off*/) {
+
+                present = ACC;
+
+            } else if (~ignitPoll()) {
+
+                present = ACC;
+            }
+            break;
+
+        /* PCB state of FSM */
+        default:
+            if (accPoll()) {
+                present = ACC;
+            }
+            break;
+
+        }
     }
 }
 
@@ -150,42 +202,37 @@ void switchesSetup(void)
     GPIOH->PDR |= GPIO_PIN_1;
 }
 
-void accPoll(void)
+bool accPoll(void)
 {
     /* Poll if accessory Rx is HIGH. If so, output HIGH to accessory relay.
     Else, keep output to accessory relay LOW.
     Return whether accessory Rx reads HIGH or LOW as bit packed byte */
 
-    // bool input = MAP_GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_1);
-
     // Accessory switch, Rx: PH1, Relay Output: PK4
     if (MAP_GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_1) == GPIO_PIN_1) {
         MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PIN_4);
+        return true;
     } else {
         MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~(GPIO_PIN_4));
+        return false;
     }
-
-    // return input;
 
 }
 
-void ignitPoll(void)
+bool ignitPoll(void)
 {
     /* Poll if ignition Rx is HIGH. If so, output HIGH to ignition relay.
     Else, keep output to ignition relay LOW.
     Return whether ignition Rx reads HIGH or LOW as bit packed byte */
 
-
-    // bool input = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3);
-
     // Ignition switch, Rx: PP3, Relay Output: PH0
     if (  MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3) == GPIO_PIN_3) {
         MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, GPIO_PIN_0);
+        return true;
     } else {
         MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~(GPIO_PIN_0));
+        return false;
     }
-
-    // return input;
 
 }
 
