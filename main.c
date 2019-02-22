@@ -73,9 +73,10 @@ void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
 void auxADCSetup();
 uint32_t auxADCSend(uint32_t* auxBatVoltage);
 void UART7Setup();
-void switchesSetup(void);
+void accIgnDESetup(void);
 bool ignitPoll(void);
 bool accPoll(void);
+bool DEPoll(void);
 
 
 int main(void)
@@ -91,7 +92,7 @@ int main(void)
 
     auxADCSetup();
     UART7Setup();
-    switchesSetup();
+    accIgnDESetup();
 
     states_t present = PCB;
 
@@ -133,7 +134,7 @@ int main(void)
 
                 present = ACC;
 
-            } else if (/*BMS discharge enable off*/) {
+            } else if (~DEPoll()) {
 
                 present = ACC;
 
@@ -154,14 +155,12 @@ int main(void)
     }
 }
 
-
-void switchesSetup(void)
+void accIgnDESetup(void)
 {
-    /* Enables pins for ACC Tx/Rx, IGN Tx/Rx and the ACC/IGN relays */
+    /* Enables pins for ACC Tx/Rx, IGN Tx/Rx, ACC/IGN relays and reading from BMS Discharge Enable  */
 
 
-    /* Enable clock peripherals used
-    (H, K, M, P, Q) */
+    /* Enable clock to peripherals used (H, K, M, P, Q) */
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOH);
     while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOH)){};
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOK);
@@ -200,13 +199,16 @@ void switchesSetup(void)
     /* Then, enable the MCU's pull-down resistors on each to prevent noise */
     GPIOP->PDR |= GPIO_PIN_3;
     GPIOH->PDR |= GPIO_PIN_1;
+
+    /* Enable MCU's pull-up resistor on PM1 for reading from BMS Discharge Enable */
+    GPIOM->PUR |= GPIO_PIN_1;
 }
 
 bool accPoll(void)
 {
     /* Poll if accessory Rx is HIGH. If so, output HIGH to accessory relay.
     Else, keep output to accessory relay LOW.
-    Return whether accessory Rx reads HIGH or LOW as bit packed byte */
+    Return TRUE if acc Rx reads HIGH and FALSE if acc Rx reads LOW */
 
     // Accessory switch, Rx: PH1, Relay Output: PK4
     if (MAP_GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_1) == GPIO_PIN_1) {
@@ -223,7 +225,7 @@ bool ignitPoll(void)
 {
     /* Poll if ignition Rx is HIGH. If so, output HIGH to ignition relay.
     Else, keep output to ignition relay LOW.
-    Return whether ignition Rx reads HIGH or LOW as bit packed byte */
+    Return TRUE if ignition Rx reads HIGH and FALSE if ignition Rx reads LOW */
 
     // Ignition switch, Rx: PP3, Relay Output: PH0
     if (  MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3) == GPIO_PIN_3) {
@@ -231,6 +233,21 @@ bool ignitPoll(void)
         return true;
     } else {
         MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~(GPIO_PIN_0));
+        return false;
+    }
+
+}
+
+bool DEPoll(void)
+{
+    /* Poll if the bike is able to be discharged.
+       Return TRUE if so, return FALSE otherwise. */
+
+    /* DE is read from PM1. Note that a pull-up resistor is enabled on PM1.
+       The BMS grounds PM1 when the bike can discharge. */
+    if (MAP_GPIOPinRead(GPIO_PORTM_BASE, GPIO_PIN_1) == ~(GPIO_PIN_1)) {
+        return true;
+    } else {
         return false;
     }
 
