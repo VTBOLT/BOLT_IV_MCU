@@ -82,6 +82,8 @@ void ignitPoll(void);
 void accPoll(void);
 void canSetup(tCANMsgObject* message);
 void configureCAN();
+void canReceiveTransmit(tCANMsgObject* sCANMessage, uint8_t msgDataIndex, uint8_t* msgData);
+
 
 
 int main(void)
@@ -111,7 +113,7 @@ int main(void)
     {
         //accPoll();
         //ignitPoll();
-
+        canReceiveTransmit(&sCANMessage, msgDataIndex, msgData);
 
 
     }
@@ -178,6 +180,49 @@ void configureCAN(void)
 
     /* Enable the CAN for operation */
     MAP_CANEnable(CAN0_BASE);
+}
+
+void canReceiveTransmit(tCANMsgObject* sCANMessage, uint8_t msgDataIndex, uint8_t* msgData)
+{
+    /* A new message is received */
+    if (rxMsg)
+    {
+        /* Re-use the same message object that was used earlier to configure
+         * the CAN */
+        sCANMessage->pui8MsgData = (uint8_t *)&msgData;
+
+        /* Read the message from the CAN */
+        MAP_CANMessageGet(CAN0_BASE, 1, sCANMessage, 0);
+
+        /* Check the error flag to see if errors occurred */
+        if (sCANMessage->ui32Flags & MSG_OBJ_DATA_LOST)
+        {
+              UARTprintf("\nCAN message loss detected\n");
+        }
+        else
+        {
+            /* Print a message to the console showing the message count and the
+             * contents of the received message */
+            UARTprintf("Received msg 0x%03X: ",sCANMessage->ui32MsgID);
+            for (msgDataIndex = 0; msgDataIndex < sCANMessage->ui32MsgLen;
+                    msgDataIndex++)
+            {
+                UARTprintf("0x%02X ",msgData[msgDataIndex]);
+            }
+
+            /* Print the count of message sent */
+            UARTprintf(" total count = %u\n", msgCount);
+        }
+
+        /* Clear rx flag */
+        rxMsg = false;
+    }
+    else
+    {
+        if(errFlag)
+        {
+        }
+    }
 }
 
 void switchesSetup(void)
@@ -356,7 +401,7 @@ void UART7Setup()
                             UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE);
 }
 
-void CAN0_IRQHandler(void)
+void CAN0_IRQHandler(void) // Uses CAN0, on J5
 {
     uint32_t canStatus;
 
