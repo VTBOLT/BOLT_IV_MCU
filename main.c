@@ -105,14 +105,21 @@ int main(void)
 
         /* ACC state of FSM */
         case ACC:
+
+            // Output HIGH to ACC Relay
+            MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PIN_4);
+
+            // Output LOW to IGN Relay
+            MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~GPIO_PIN_0);
+
+            // Aux battery voltage stored as volts * 1000
             auxBatAdjusted = auxADCSend(auxBatVoltage);
 
-            /* auxBat voltage has priority? */
             if (auxBatAdjusted <= 1200) {
 
                 present = PCB;
 
-            } else if (accPoll()) {
+            } else if (!accPoll()) {
 
                 present = PCB;
 
@@ -124,6 +131,13 @@ int main(void)
 
         /* IGN state of FSM */
         case IGN:
+
+            // Output HIGH to ACC Relay
+            MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PIN_4);
+
+            // Output HIGH to IGN Relay
+            MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, GPIO_PIN_0);
+
             auxBatAdjusted = auxADCSend(auxBatVoltage);
 
             if (auxBatAdjusted <= 1200) {
@@ -134,11 +148,11 @@ int main(void)
 
                 present = ACC;
 
-            } else if (~DEPoll()) {
+            } else if (!DEPoll()) {
 
                 present = ACC;
 
-            } else if (~ignitPoll()) {
+            } else if (!ignitPoll()) {
 
                 present = ACC;
             }
@@ -146,6 +160,13 @@ int main(void)
 
         /* PCB state of FSM */
         default:
+
+            // Output LOW to ACC Relay
+            MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~(GPIO_PIN_4));
+
+            // Output LOW to IGN Relay
+            MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~GPIO_PIN_0);
+
             if (accPoll()) {
                 present = ACC;
             }
@@ -206,16 +227,12 @@ void accIgnDESetup(void)
 
 bool accPoll(void)
 {
-    /* Poll if accessory Rx is HIGH. If so, output HIGH to accessory relay.
-    Else, keep output to accessory relay LOW.
-    Return TRUE if acc Rx reads HIGH and FALSE if acc Rx reads LOW */
+    /* Return TRUE if acc Rx reads HIGH and FALSE if acc Rx reads LOW.
+       As a note: ACC Rx: PH1, ACC Relay: PK4 */
 
-    // Accessory switch, Rx: PH1, Relay Output: PK4
     if (MAP_GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_1) == GPIO_PIN_1) {
-        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PIN_4);
         return true;
     } else {
-        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~(GPIO_PIN_4));
         return false;
     }
 
@@ -223,13 +240,10 @@ bool accPoll(void)
 
 bool ignitPoll(void)
 {
-    /* Poll if ignition Rx is HIGH. If so, output HIGH to ignition relay.
-    Else, keep output to ignition relay LOW.
-    Return TRUE if ignition Rx reads HIGH and FALSE if ignition Rx reads LOW */
+    /* Return TRUE if ignition Rx reads HIGH and FALSE if ignition Rx reads LOW
+       As a note: IGN Rx: PP3, IGN Relay: PH0 */
 
-    // Ignition switch, Rx: PP3, Relay Output: PH0
     if (  MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3) == GPIO_PIN_3) {
-        MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, GPIO_PIN_0);
         return true;
     } else {
         MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~(GPIO_PIN_0));
@@ -243,8 +257,8 @@ bool DEPoll(void)
     /* Poll if the bike is able to be discharged.
        Return TRUE if so, return FALSE otherwise. */
 
-    /* DE is read from PM1. Note that a pull-up resistor is enabled on PM1.
-       The BMS grounds PM1 when the bike can discharge. */
+    /* DE is read from PM1. Pull-up resistor is enabled on PM1 since
+       the BMS grounds PM1 when the bike can discharge. */
     if (MAP_GPIOPinRead(GPIO_PORTM_BASE, GPIO_PIN_1) == ~(GPIO_PIN_1)) {
         return true;
     } else {
