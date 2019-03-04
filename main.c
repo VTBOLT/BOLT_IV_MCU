@@ -83,7 +83,9 @@
 #define highVoltageBit  2
 #define lowVoltageID    0x6B3
 #define lowVoltageBit   4
-#define voltageLength   2
+#define voltageLength   4
+
+#define imuLength		4
 
 /* Configure system clock for 120 MHz */
 uint32_t systemClock;
@@ -102,6 +104,22 @@ typedef struct {
     uint8_t highVoltage[voltageLength];
     uint8_t lowVoltage[voltageLength];
 } CANTransmitData;
+
+// IMU data struct
+typedef struct {
+	uint8_t xLat[imuLength];
+	uint8_t yLat[imuLength];
+	uint8_t zLat[imuLength];
+	uint8_t xGyro[imuLength];
+	uint8_t yGyro[imuLength];
+	uint8_t zGyro[imuLength];
+} IMUTransmitData_t;
+
+// Pump Voltage
+uint8_t pumpVoltage[voltageLength];
+
+// AUX pack voltage
+uint8_t auxVoltage[voltageLength];
 
 // Function prototypes
 void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
@@ -135,23 +153,69 @@ int main(void)
     uint32_t auxBatAdjusted; //no decimal, accurate value
 
 
-    auxADCSetup();
+    //auxADCSetup();
     UART7Setup();
-    switchesSetup();
-    configureCAN();
-    canSetup(&sCANMessage);
+    //switchesSetup();
+    //configureCAN();
+    //canSetup(&sCANMessage);
 
 
     // Loop forever.
     while (1)
     {
         static CANTransmitData CANData;
+        static IMUTransmitData_t IMUData;
+
+        CANData.SOC = '1';
+        CANData.FPV = "300";
+        CANData.highTemp = "80";
+        CANData.lowTemp = "70";
+        CANData.highVoltage = "6.8";
+        CANData.lowVoltage = "6.4";
+
+        IMUData.xLat = "1.5";
+        IMUData.yLat = "1.2";
+        IMUData.zLat = "1";
+        IMUData.xGyro = "20";
+        IMUData.yGyro = "3";
+        IMUData.zGyro = "0";
+
+        pumpVoltage = "12";
+
+        auxVoltage = "16"
+
+
         //accPoll();
         //ignitPoll();
-        canReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
-
+        //canReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
+        xbeeTransmit(CANData, IMUData, pumpVoltage, auxVoltage);
 
     }
+}
+
+void xbeeTransmit(const CANTransmitData CANData, const IMUTransmitData_t IMUData, const uint8_t pumpVoltage, const uint8_t auxVoltage)
+{
+	// Send CAN Data
+	UARTSend(CANData.SOC, sizeof(CANData.SOC));
+	UARTSend(CANData.FPV, sizeof(CANData.FPV));
+	UARTSend(CANData.highTemp, sizeof(CANData.highTemp));
+	UARTSend(CANData.lowTemp, sizeof(CANData.lowTemp));
+	UARTSend(CANData.highVoltage, sizeof(CANData.highVoltage));
+	UARTSend(CANData.lowVoltage, sizeof(CANData.lowVoltage));
+
+	// Send Pump Voltage
+	UARTSend(pumpVoltage, sizeof(pumpVoltage));
+
+	// Send AUX pack voltage
+	UARTSend(auxVoltage, sizeof(auxVoltage));
+
+	// Send IMU Data
+	UARTSend(IMUData.xLat, sizeof(IMUData.xLat));
+	UARTSend(IMUData.yLat, sizeof(IMUData.yLat));
+	UARTSend(IMUData.zLat, sizeof(IMUData.zLat));
+	UARTSend(IMUData.xGyro, sizeof(IMUData.xGyro));
+	UARTSend(IMUData.yGyro, sizeof(IMUData.yGyro));
+	UARTSend(IMUData.zGyro, sizeof(IMUData.zGyro));
 }
 
 void canSetup(tCANMsgObject* message)
