@@ -64,6 +64,27 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+// Set these once they are known
+#define SOC_ID          0x6B0
+#define SOC_bit         4
+#define SOC_length      1
+
+#define FPV_ID          0x6B0
+#define FPV_bit         2
+#define FPV_length      2
+
+#define highTempID      0x6B4
+#define highTempBit     0
+#define lowTempID       0x6B4
+#define lowTempBit      2
+#define tempLength      2
+
+#define highVoltageID   0x6B3
+#define highVoltageBit  2
+#define lowVoltageID    0x6B3
+#define lowVoltageBit   4
+#define voltageLength   2
+
 /* Configure system clock for 120 MHz */
 uint32_t systemClock;
 
@@ -71,6 +92,16 @@ uint32_t systemClock;
 bool rxMsg = false;
 bool errFlag = false;
 uint32_t msgCount = 0;
+
+// CAN data struct
+typedef struct {
+    uint8_t SOC;
+    uint8_t FPV[FPV_length];
+    uint8_t highTemp[tempLength];
+    uint8_t lowTemp[tempLength];
+    uint8_t highVoltage[voltageLength];
+    uint8_t lowVoltage[voltageLength];
+} CANTransmitData;
 
 // Function prototypes
 void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
@@ -82,7 +113,9 @@ void ignitPoll(void);
 void accPoll(void);
 void canSetup(tCANMsgObject* message);
 void configureCAN();
-void canReceiveTransmit(tCANMsgObject* sCANMessage, uint8_t msgDataIndex, uint8_t* msgData);
+void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANdata,
+                uint8_t msgDataIndex, uint8_t* msgData);
+
 
 
 
@@ -105,15 +138,17 @@ int main(void)
     auxADCSetup();
     UART7Setup();
     switchesSetup();
+    configureCAN();
     canSetup(&sCANMessage);
 
 
     // Loop forever.
     while (1)
     {
+        static CANTransmitData CANData;
         //accPoll();
         //ignitPoll();
-        canReceiveTransmit(&sCANMessage, msgDataIndex, msgData);
+        canReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
 
 
     }
@@ -182,11 +217,17 @@ void configureCAN(void)
     MAP_CANEnable(CAN0_BASE);
 }
 
-void canReceiveTransmit(tCANMsgObject* sCANMessage, uint8_t msgDataIndex, uint8_t* msgData)
+void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANData, uint8_t msgDataIndex, uint8_t* msgData)
 {
+    uint8_t cycleMsgs = 0;
     /* A new message is received */
-    if (rxMsg)
+    if (rxMsg && cycleMsgs <= 6)
     {
+        // Set rxMsg to false so that the interrupt has as much time as possible
+        // to trigger during the function - could result in weird data if triggered
+        // immediately, while message is being read
+        rxMsg = false;
+
         /* Re-use the same message object that was used earlier to configure
          * the CAN */
         sCANMessage->pui8MsgData = (uint8_t *)&msgData;
@@ -203,19 +244,35 @@ void canReceiveTransmit(tCANMsgObject* sCANMessage, uint8_t msgDataIndex, uint8_
         {
             /* Print a message to the console showing the message count and the
              * contents of the received message */
+            // [1] is set before [0] because the BMS sends in big-endian, but
+            // the MSP432 is little-endian
             UARTprintf("Received msg 0x%03X: ",sCANMessage->ui32MsgID);
-            for (msgDataIndex = 0; msgDataIndex < sCANMessage->ui32MsgLen;
-                    msgDataIndex++)
-            {
-                UARTprintf("0x%02X ",msgData[msgDataIndex]);
-            }
+                if (sCANMessage->ui32MsgID == SOC_ID)
+                    CANData->SOC = msgData[SOC_bit];
+                else if (sCANMessage->ui32MsgID == FPV_ID) {
+                    CANData->FPV[1] = msgData[FPV_bit];
+                    CANData->FPV[0] = msgData[FPV_bit+1];
+                }
+                else if (sCANMessage->ui32MsgID == highTempID) {
+                    CANData->highTemp[1] = msgData[highTempBit];
+                    CANData->highTemp[0] = msgData[highTempBit+1];
+                }
+                else if (sCANMessage->ui32MsgID == lowTempID) {
+                    CANData->lowTemp[1] = msgData[lowTempBit];
+                    CANData->lowTemp[0] = msgData[lowTempBit+1];
+                }
+                else if (sCANMessage->ui32MsgID == highVoltageID) {
+                    CANData->highVoltage[1] = msgData[highVoltageBit];
+                    CANData->highVoltage[0] = msgData[highVoltageBit+1];
+                }
+                else if (sCANMessage->ui32MsgID = lowVoltageID) {
+                    CANData->lowVoltage[1] = msgData[lowVoltageBit];
+                    CANData->lowVoltage[0] = msgData[lowVoltageBit+1];
+                }
 
             /* Print the count of message sent */
-            UARTprintf(" total count = %u\n", msgCount);
+            //UARTprintf(" total count = %u\n", msgCount);
         }
-
-        /* Clear rx flag */
-        rxMsg = false;
     }
     else
     {
