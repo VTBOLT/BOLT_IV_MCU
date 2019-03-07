@@ -112,6 +112,9 @@ int main(void)
             // Output LOW to IGN Relay
             MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~GPIO_PIN_0);
 
+            // Output HIGH to PSI LED
+            MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
+
             // Aux battery voltage stored as volts * 1000
             auxBatAdjusted = auxADCSend(auxBatVoltage);
 
@@ -137,6 +140,9 @@ int main(void)
 
             // Output HIGH to IGN Relay
             MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, GPIO_PIN_0);
+
+            // Output HIGH to PSI LED
+            MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
 
             auxBatAdjusted = auxADCSend(auxBatVoltage);
 
@@ -166,6 +172,9 @@ int main(void)
 
             // Output LOW to IGN Relay
             MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~GPIO_PIN_0);
+
+            // Output LOW to PSI LED
+            MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, ~GPIO_PIN_2);
 
             if (accPoll()) {
                 present = ACC;
