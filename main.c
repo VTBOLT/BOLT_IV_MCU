@@ -67,23 +67,23 @@
 // Set these once they are known
 #define SOC_ID          0x6B0
 #define SOC_bit         4
-#define SOC_length      1
+#define SOC_length      3
 
 #define FPV_ID          0x6B0
 #define FPV_bit         2
-#define FPV_length      2
+#define FPV_length      5
 
 #define highTempID      0x6B4
 #define highTempBit     0
 #define lowTempID       0x6B4
 #define lowTempBit      2
-#define tempLength      2
+#define tempLength      5
 
 #define highVoltageID   0x6B3
 #define highVoltageBit  2
 #define lowVoltageID    0x6B3
 #define lowVoltageBit   4
-#define voltageLength   2
+#define voltageLength   5
 
 /* Configure system clock for 120 MHz */
 uint32_t systemClock;
@@ -95,7 +95,7 @@ uint32_t msgCount = 0;
 
 // CAN data struct
 typedef struct {
-    uint8_t SOC;
+    uint8_t SOC[SOC_length];
     uint8_t FPV[FPV_length];
     uint8_t highTemp[tempLength];
     uint8_t lowTemp[tempLength];
@@ -115,7 +115,7 @@ void canSetup(tCANMsgObject* message);
 void configureCAN();
 void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANdata,
                 uint8_t msgDataIndex, uint8_t* msgData);
-
+void convertToASCII(uint8_t* chars, uint8_t digits, uint16_t num);
 
 
 
@@ -149,6 +149,8 @@ int main(void)
         //accPoll();
         //ignitPoll();
         canReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
+
+
 
 
     }
@@ -244,34 +246,35 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANData, uint8_t ms
         {
             /* Print a message to the console showing the message count and the
              * contents of the received message */
-            // [1] is set before [0] because the BMS sends in big-endian, but
-            // the MSP432 is little-endian
-            UARTprintf("Received msg 0x%03X: ",sCANMessage->ui32MsgID);
-                if (sCANMessage->ui32MsgID == SOC_ID)
-                    CANData->SOC = msgData[SOC_bit];
-                else if (sCANMessage->ui32MsgID == FPV_ID) {
-                    CANData->FPV[1] = msgData[FPV_bit];
-                    CANData->FPV[0] = msgData[FPV_bit+1];
-                }
-                else if (sCANMessage->ui32MsgID == highTempID) {
-                    CANData->highTemp[1] = msgData[highTempBit];
-                    CANData->highTemp[0] = msgData[highTempBit+1];
-                }
-                else if (sCANMessage->ui32MsgID == lowTempID) {
-                    CANData->lowTemp[1] = msgData[lowTempBit];
-                    CANData->lowTemp[0] = msgData[lowTempBit+1];
-                }
-                else if (sCANMessage->ui32MsgID == highVoltageID) {
-                    CANData->highVoltage[1] = msgData[highVoltageBit];
-                    CANData->highVoltage[0] = msgData[highVoltageBit+1];
-                }
-                else if (sCANMessage->ui32MsgID = lowVoltageID) {
-                    CANData->lowVoltage[1] = msgData[lowVoltageBit];
-                    CANData->lowVoltage[0] = msgData[lowVoltageBit+1];
-                }
+            //UARTprintf("Received msg 0x%03X: ",sCANMessage->ui32MsgID);
+            uint8_t SOCtemp;
+            uint16_t FPVtemp;
+            uint16_t highTempTemp;
+            uint16_t lowTempTemp;
+            uint16_t highVoltTemp;
+            uint16_t lowVoltTemp;
 
-            /* Print the count of message sent */
-            //UARTprintf(" total count = %u\n", msgCount);
+            // Populates the temporary variables
+            if (sCANMessage->ui32MsgID == SOC_ID)
+                SOCtemp = msgData[SOC_bit];
+            if (sCANMessage->ui32MsgID == FPV_ID)
+                FPVtemp = (msgData[FPV_bit+1] << 8) | msgData[FPV_bit];
+            if (sCANMessage->ui32MsgID == highTempID)
+                highTempTemp = (msgData[highTempBit+1] << 8) | msgData[highTempBit];
+            if (sCANMessage->ui32MsgID == lowTempID)
+                lowTempTemp = (msgData[lowTempBit+1] << 8) | msgData[lowTempBit];
+            if (sCANMessage->ui32MsgID == highVoltageID)
+                highVoltTemp = (msgData[highVoltageBit+1] << 8) | msgData[highVoltageBit];
+            if (sCANMessage->ui32MsgID == lowVoltageID)
+                lowVoltTemp = (msgData[lowVoltageBit+1] << 8) | msgData[lowVoltageBit];
+
+            // Processes numbers into ASCII
+            convertToASCII(CANData->SOC, 3, SOCtemp);
+            convertToASCII(CANData->FPV, 5, FPVtemp);
+            convertToASCII(CANData->highTemp, 5, highTempTemp);
+            convertToASCII(CANData->lowTemp, 5, lowTempTemp);
+            convertToASCII(CANData->lowVoltage, 5, lowVoltTemp);
+            convertToASCII(CANData->highVoltage, 5, highVoltTemp);
         }
     }
     else
@@ -378,7 +381,7 @@ void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count)
         //
         // Write the next character to the UART.
         //
-        MAP_UARTCharPutNonBlocking(UART7_BASE, *pui8Buffer++);
+        MAP_UARTCharPut(UART7_BASE, *pui8Buffer++);
     }
 }
 
@@ -456,6 +459,15 @@ void UART7Setup()
     /* Configure UART for 57,600, 8-N-1 */
     MAP_UARTConfigSetExpClk(UART7_BASE, systemClock, 57600,
                             UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE);
+}
+
+void convertToASCII(uint8_t* chars, uint8_t digits, uint16_t num)
+{
+    for ( ; digits > 0; digits--)
+    {
+        chars[digits-1] = num % 10 + '0';
+        num /= 10;
+    }
 }
 
 void CAN0_IRQHandler(void) // Uses CAN0, on J5
