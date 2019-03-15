@@ -94,13 +94,13 @@ bool errFlag = false;
 uint32_t msgCount = 0;
 
 // CAN data struct
-typedef struct {
-    uint8_t SOC[SOC_length];
-    uint8_t FPV[FPV_length];
-    uint8_t highTemp[tempLength];
-    uint8_t lowTemp[tempLength];
-    uint8_t highVoltage[voltageLength];
-    uint8_t lowVoltage[voltageLength];
+typedef struct {                         // Multiplication factors (units)
+    uint8_t SOC[SOC_length];             // 0.5 (%)
+    uint8_t FPV[FPV_length];             // 0.1 (V)
+    uint8_t highTemp[tempLength];        // 1 (degrees C)
+    uint8_t lowTemp[tempLength];         // 1 (degrees C)
+    uint8_t highVoltage[voltageLength];  // 0.0001 (V)
+    uint8_t lowVoltage[voltageLength];   // 0.0001 (V)
 } CANTransmitData;
 
 // Function prototypes
