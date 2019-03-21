@@ -67,6 +67,7 @@
 uint32_t systemClock;
 
 typedef enum states { PCB, ACC, IGN, MAX_STATES } states_t;
+#define THREESEC 360000000
 
 // Function prototypes
 void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
@@ -74,6 +75,8 @@ void auxADCSetup();
 uint32_t auxADCSend(uint32_t* auxBatVoltage);
 void UART7Setup();
 void accIgnDESetup(void);
+void timerSetup();
+void TIMER0A_IRQHandler(void);
 bool ignitPoll(void);
 bool accPoll(void);
 bool DEPoll(void);
@@ -93,6 +96,7 @@ int main(void)
     auxADCSetup();
     UART7Setup();
     accIgnDESetup();
+    timerSetup();
 
     states_t present = PCB;
 
@@ -114,6 +118,11 @@ int main(void)
 
             // Output HIGH to PSI LED
             MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
+
+            //
+            //  Wait 3 seconds to check value, ensure constant value
+            //
+            timerSetup();
 
             // Aux battery voltage stored as volts * 1000
             auxBatAdjusted = auxADCSend(auxBatVoltage);
@@ -143,6 +152,11 @@ int main(void)
 
             // Output HIGH to PSI LED
             MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
+
+            //
+            // Wait 3 seconds, ensure solid value obtained
+            //
+            timerSetup();
 
             auxBatAdjusted = auxADCSend(auxBatVoltage);
 
@@ -364,4 +378,26 @@ void UART7Setup()
     /* Configure UART for 57,600, 8-N-1 */
     MAP_UARTConfigSetExpClk(UART7_BASE, systemClock, 57600,
                             UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE);
+}
+
+void timerSetup() {
+    // Configure the 32-bit periodic timer.
+    //MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
+    MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_A_ONE_SHOT);
+    MAP_TimerLoadSet(TIMER0_BASE, TIMER_A, THREESEC);
+    // Setup the interrupts for the timer timeouts.
+    MAP_TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
+    MAP_IntEnable(INT_TIMER0A);
+    // Enable the timers.
+    MAP_TimerEnable(TIMER0_BASE, TIMER_A);
+
+    while(1) {}
+}
+
+void TIMER0A_IRQHandler(void)
+{
+    uint32_t getTimerInterrupt;
+    /* Get timer interrupt status  and clear the same */
+    getTimerInterrupt = MAP_TimerIntStatus(TIMER0_BASE, true);
+    MAP_TimerIntClear(TIMER0_BASE, getTimerInterrupt);
 }
