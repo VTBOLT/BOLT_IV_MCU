@@ -96,7 +96,7 @@ int main(void)
     auxADCSetup();
     UART7Setup();
     accIgnDESetup();
-    timerSetup();
+    //timerSetup();
 
     states_t present = PCB;
 
@@ -122,16 +122,16 @@ int main(void)
             //
             //  Wait 3 seconds to check value, ensure constant value
             //
-            timerSetup();
+            //timerSetup();
 
             // Aux battery voltage stored as volts * 1000
-            auxBatAdjusted = auxADCSend(auxBatVoltage);
+            //auxBatAdjusted = auxADCSend(auxBatVoltage);
 
-            if (auxBatAdjusted <= 1200) {
+            //if (auxBatAdjusted <= 1200) {
 
-                present = PCB;
+                //present = PCB;
 
-            } else if (!accPoll()) {
+            /*} else*/ if (!accPoll()) {
 
                 present = PCB;
 
@@ -156,19 +156,19 @@ int main(void)
             //
             // Wait 3 seconds, ensure solid value obtained
             //
-            timerSetup();
+            //timerSetup();
 
-            auxBatAdjusted = auxADCSend(auxBatVoltage);
+            //auxBatAdjusted = auxADCSend(auxBatVoltage);
 
-            if (auxBatAdjusted <= 1200) {
+            //if (auxBatAdjusted <= 1200) {
 
-                present = ACC;
+                //present = ACC;
 
-            } else if (/*Low pump current*/) {
+            //} else if (/*Low pump current*/) {
 
-                present = ACC;
+                //present = ACC;
 
-            } else if (!DEPoll()) {
+            /*} else*/ if (!DEPoll()) {
 
                 present = ACC;
 
@@ -182,7 +182,7 @@ int main(void)
         default:
 
             // Output LOW to ACC Relay
-            MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~(GPIO_PIN_4));
+            MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~GPIO_PIN_4);
 
             // Output LOW to IGN Relay
             MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~GPIO_PIN_0);
@@ -230,6 +230,7 @@ void accIgnDESetup(void)
     (PH0 and PK4, respectively) */
     MAP_GPIOPinTypeGPIOOutput(GPIO_PORTH_BASE, GPIO_PIN_0);
     MAP_GPIOPinTypeGPIOOutput(GPIO_PORTK_BASE, GPIO_PIN_4);
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTP_BASE, GPIO_PIN_2);
 
     /* Then, set them to LOW */
     MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~GPIO_PIN_0);
@@ -239,6 +240,10 @@ void accIgnDESetup(void)
     (PP3 and PH1, respectively) */
     MAP_GPIOPinTypeGPIOInput(GPIO_PORTP_BASE, GPIO_PIN_3);
     MAP_GPIOPinTypeGPIOInput(GPIO_PORTH_BASE, GPIO_PIN_1);
+
+    /* Enable the GPIO pin for BMS Discharge Enable as input.
+    (PP2) */
+    MAP_GPIOPinTypeGPIOInput(GPIO_PORTM_BASE, GPIO_PIN_1);
 
     /* Then, enable the MCU's pull-down resistors on each to prevent noise */
     GPIOP->PDR |= GPIO_PIN_3;
@@ -269,7 +274,6 @@ bool ignitPoll(void)
     if (  MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3) == GPIO_PIN_3) {
         return true;
     } else {
-        MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~(GPIO_PIN_0));
         return false;
     }
 
@@ -282,10 +286,10 @@ bool DEPoll(void)
 
     /* DE is read from PM1. Pull-up resistor is enabled on PM1 since
        the BMS grounds PM1 when the bike can discharge. */
-    if (MAP_GPIOPinRead(GPIO_PORTM_BASE, GPIO_PIN_1) == ~(GPIO_PIN_1)) {
-        return true;
-    } else {
+    if (MAP_GPIOPinRead(GPIO_PORTM_BASE, GPIO_PIN_1) == GPIO_PIN_1) {
         return false;
+    } else {
+        return true;
     }
 
 }
