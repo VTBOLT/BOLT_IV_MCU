@@ -153,38 +153,37 @@ int main(void)
         /* IGN state of FSM */
         case IGN:
 
-            // Output HIGH to ACC Relay
-            MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PIN_4);
+            if (DEPoll()) {
 
-            // Output HIGH to IGN Relay
-            MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, GPIO_PIN_0);
+                // Output HIGH to ACC Relay
+                MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PIN_4);
 
-            // Output HIGH to PSI LED
-            MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
+                // Output HIGH to IGN Relay
+                MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, GPIO_PIN_0);
 
-            //auxBatAdjusted = auxADCSend(auxBatVoltage);
+                // Output HIGH to PSI LED
+                MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
 
-            //if (auxBatAdjusted <= 1200) {
+                //auxBatAdjusted = auxADCSend(auxBatVoltage);
 
-            //  Wait 3 seconds to check value, ensure constant value
-                // timerSetup();
+                //if (auxBatAdjusted <= 1200) {
 
-                // auxBatAdjusted = auxADCSend(auxBatVoltage);
-                // if (auxBatAdjusted <= 1200) {
-                    // present = ACC;
-                // }
+                //  Wait 3 seconds to check value, ensure constant value
+                    // timerSetup();
 
-            //} else if (/*Low pump current*/) {
+                    // auxBatAdjusted = auxADCSend(auxBatVoltage);
+                    // if (auxBatAdjusted <= 1200) {
+                        // present = ACC;
+                    // }
 
-                //present = ACC;
+                //} else if (/*Low pump current*/) {
 
-            /*} else*/ if (!DEPoll()) {
+                    //present = ACC;
 
-                present = ACC;
+                /*} else*/ if (!ignitPoll()) {
 
-            } else if (!ignitPoll()) {
-
-                present = ACC;
+                    present = ACC;
+                }
             }
             break;
 
@@ -203,9 +202,9 @@ int main(void)
             //
             // TESTING timerSetup()
             //
-            MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
-            timerSetup();
-            MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, ~GPIO_PIN_2);
+            //MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
+            //timerSetup();
+            //MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, ~GPIO_PIN_2);
 
 
             if (accPoll()) {
