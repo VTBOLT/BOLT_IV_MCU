@@ -67,7 +67,13 @@
 uint32_t systemClock;
 
 typedef enum states { PCB, ACC, IGN, MAX_STATES } states_t;
-#define THREESEC 360000000
+// Required second count to delay switching off ACC and IGN if voltage dips below for a brief second.
+// We want to calculate the # of cycles to delay x seconds from the formula below:
+// x seconds delay = (# of Cycles) * (1/frequency)
+// So plug in the second count that you want delayed into the formula below:
+// (120MHz)*(x second delay) = # of cycles
+// The current value is for a 3 second delay: (120MHz)*(3s)=360000000
+#define REQSECCOUNT 360000000
 
 // Function prototypes
 void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
@@ -118,17 +124,19 @@ int main(void)
             // Output HIGH to PSI LED
             MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
 
-            //
-            //  Wait 3 seconds to check value, ensure constant value
-            //
-            //timerSetup();
 
             // Aux battery voltage stored as volts * 1000
             //auxBatAdjusted = auxADCSend(auxBatVoltage);
 
             //if (auxBatAdjusted <= 1200) {
 
-                //present = PCB;
+                //  Wait 3 seconds to check value, ensure constant value
+                // timerSetup();
+
+                // auxBatAdjusted = auxADCSend(auxBatVoltage);
+                // if (auxBatAdjusted <= 1200) {
+                    // present = PCB;
+                // }
 
             /*} else*/ if (!accPoll()) {
 
@@ -152,16 +160,17 @@ int main(void)
             // Output HIGH to PSI LED
             MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
 
-            //
-            // Wait 3 seconds, ensure solid value obtained
-            //
-            //timerSetup();
-
             //auxBatAdjusted = auxADCSend(auxBatVoltage);
 
             //if (auxBatAdjusted <= 1200) {
 
-                //present = ACC;
+            //  Wait 3 seconds to check value, ensure constant value
+                // timerSetup();
+
+                // auxBatAdjusted = auxADCSend(auxBatVoltage);
+                // if (auxBatAdjusted <= 1200) {
+                    // present = ACC;
+                // }
 
             //} else if (/*Low pump current*/) {
 
@@ -188,6 +197,14 @@ int main(void)
 
             // Output LOW to PSI LED
             MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, ~GPIO_PIN_2);
+
+            //
+            // TESTING timerSetup()
+            //
+            MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
+            timerSetup();
+            MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, ~GPIO_PIN_2);
+
 
             if (accPoll()) {
                 present = ACC;
@@ -387,16 +404,14 @@ void timerSetup() {
     // Configure the 32-bit periodic timer.
     //MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
     MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_ONE_SHOT);
-    MAP_TimerLoadSet(TIMER0_BASE, TIMER_A, THREESEC);
+    MAP_TimerLoadSet(TIMER0_BASE, TIMER_A, REQSECCOUNT);
     // Setup the interrupts for the timer timeouts.
     //MAP_TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
     //MAP_IntEnable(INT_TIMER0A);
     // Enable the timers.
     MAP_TimerEnable(TIMER0_BASE, TIMER_A);
 
-    while( MAP_TimerValueGet(TIMER0_BASE, TIMER_A) != 0) {
-
-    }
+    while( MAP_TimerValueGet(TIMER0_BASE, TIMER_A) != 0) {}
 }
 
 /*void TIMER0A_IRQHandler(void)
