@@ -394,7 +394,9 @@ void timerSetup() {
     // Enable the timers.
     MAP_TimerEnable(TIMER0_BASE, TIMER_A);
 
-    while(  MAP_TimerValueGet(TIMER0_BASE, TIMER_A) != 0)) {}
+    while( MAP_TimerValueGet(TIMER0_BASE, TIMER_A) != 0) {
+
+    }
 }
 
 /*void TIMER0A_IRQHandler(void)
