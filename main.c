@@ -82,6 +82,7 @@ uint32_t auxADCSend(uint32_t* auxBatVoltage);
 void UART7Setup();
 void accIgnDESetup(void);
 void timerSetup();
+void timerRun();
 bool ignitPoll(void);
 bool accPoll(void);
 bool DEPoll(void);
@@ -95,6 +96,9 @@ int main(void)
                                           120000000);
     // Enable interrupts globally
     MAP_IntMasterEnable();
+
+    // Set up the timer system
+    timerSetup();
 
     uint32_t auxBatVoltage[1];
     uint32_t auxBatAdjusted; //no decimal, accurate value
@@ -132,7 +136,7 @@ int main(void)
             //if (auxBatAdjusted <= 1200) {
 
                 //  Wait 3 seconds to check value, ensure constant value
-                // timerSetup();
+                // timerRun();
 
                 // auxBatAdjusted = auxADCSend(auxBatVoltage);
                 // if (auxBatAdjusted <= 1200) {
@@ -166,7 +170,7 @@ int main(void)
             //if (auxBatAdjusted <= 1200) {
 
             //  Wait 3 seconds to check value, ensure constant value
-                // timerSetup();
+                // timerRun();
 
                 // auxBatAdjusted = auxADCSend(auxBatVoltage);
                 // if (auxBatAdjusted <= 1200) {
@@ -394,14 +398,19 @@ void UART7Setup()
 }
 
 void timerSetup() {
+    // Set the 32-bit timer Peripheral.
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
-    // Configure the 32-bit periodic timer.
-
+    // Configure the timer to be one-shot.
     MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_ONE_SHOT);
+}
+
+void timerRun() {
+    // Load the required second count into the timer.
     MAP_TimerLoadSet(TIMER0_BASE, TIMER_A, REQSECCOUNT);
 
-    // Enable the timers.
+    // Enable the timer.
     MAP_TimerEnable(TIMER0_BASE, TIMER_A);
 
+    // Wait for 3 seconds to have the timer delay the system
     while(MAP_TimerValueGet(TIMER0_BASE, TIMER_A) != REQSECCOUNT) {}
 }
