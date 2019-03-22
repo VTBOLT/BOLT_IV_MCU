@@ -96,7 +96,6 @@ int main(void)
     auxADCSetup();
     UART7Setup();
     accIgnDESetup();
-    //timerSetup();
 
     states_t present = PCB;
 
@@ -387,21 +386,21 @@ void UART7Setup()
 void timerSetup() {
     // Configure the 32-bit periodic timer.
     //MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
-    MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_A_ONE_SHOT);
+    MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_ONE_SHOT);
     MAP_TimerLoadSet(TIMER0_BASE, TIMER_A, THREESEC);
     // Setup the interrupts for the timer timeouts.
-    MAP_TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
-    MAP_IntEnable(INT_TIMER0A);
+    //MAP_TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
+    //MAP_IntEnable(INT_TIMER0A);
     // Enable the timers.
     MAP_TimerEnable(TIMER0_BASE, TIMER_A);
 
-    while(1) {}
+    while(  MAP_TimerValueGet(TIMER0_BASE, TIMER_A) != 0)) {}
 }
 
-void TIMER0A_IRQHandler(void)
+/*void TIMER0A_IRQHandler(void)
 {
     uint32_t getTimerInterrupt;
-    /* Get timer interrupt status  and clear the same */
+    // Get timer interrupt status  and clear the same
     getTimerInterrupt = MAP_TimerIntStatus(TIMER0_BASE, true);
     MAP_TimerIntClear(TIMER0_BASE, getTimerInterrupt);
-}
+}*/
