@@ -82,7 +82,7 @@ uint32_t auxADCSend(uint32_t* auxBatVoltage);
 void UART7Setup();
 void accIgnDESetup(void);
 void timerSetup();
-void TIMER0A_IRQHandler(void);
+void timerRun();
 bool ignitPoll(void);
 bool accPoll(void);
 bool DEPoll(void);
@@ -96,6 +96,9 @@ int main(void)
                                           120000000);
     // Enable interrupts globally
     MAP_IntMasterEnable();
+
+    // Set up the timer system
+    timerSetup();
 
     uint32_t auxBatVoltage[1];
     uint32_t auxBatAdjusted; //no decimal, accurate value
@@ -133,7 +136,7 @@ int main(void)
             //if (auxBatAdjusted <= 1200) {
 
                 //  Wait 3 seconds to check value, ensure constant value
-                // timerSetup();
+                // timerRun();
 
                 // auxBatAdjusted = auxADCSend(auxBatVoltage);
                 // if (auxBatAdjusted <= 1200) {
@@ -164,12 +167,13 @@ int main(void)
                 // Output HIGH to PSI LED
                 MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
 
+
                 //auxBatAdjusted = auxADCSend(auxBatVoltage);
 
                 //if (auxBatAdjusted <= 1200) {
 
                 //  Wait 3 seconds to check value, ensure constant value
-                    // timerSetup();
+                    // timerRun();
 
                     // auxBatAdjusted = auxADCSend(auxBatVoltage);
                     // if (auxBatAdjusted <= 1200) {
@@ -198,14 +202,6 @@ int main(void)
 
             // Output LOW to PSI LED
             MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, ~GPIO_PIN_2);
-
-            //
-            // TESTING timerSetup()
-            //
-            //MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
-            //timerSetup();
-            //MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, ~GPIO_PIN_2);
-
 
             if (accPoll()) {
                 present = ACC;
@@ -402,29 +398,19 @@ void UART7Setup()
 }
 
 void timerSetup() {
+    // Set the 32-bit timer Peripheral.
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
-    MAP_IntEnable(INT_TIMER0A);
-    // Configure the 32-bit periodic timer.
-    //MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
+    // Configure the timer to be one-shot.
     MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_ONE_SHOT);
-    MAP_TimerLoadSet(TIMER0_BASE, TIMER_A, REQSECCOUNT);
-    // Setup the interrupts for the timer timeouts.
-    MAP_TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
-    // Enable the timers.
-    MAP_TimerEnable(TIMER0_BASE, TIMER_A);
-
-
-    while(MAP_TimerValueGet(TIMER0_BASE, TIMER_A) != REQSECCOUNT) {
-            //int value = MAP_TimerValueGet(TIMER0_BASE, TIMER_A);
-            //int val2 = MAP_TimerLoadGet(TIMER0_BASE, TIMER_A);
-
-    }
 }
 
-/*void TIMER0A_IRQHandler(void)
-{
-    uint32_t getTimerInterrupt;
-    // Get timer interrupt status  and clear the same
-    getTimerInterrupt = MAP_TimerIntStatus(TIMER0_BASE, true);
-    MAP_TimerIntClear(TIMER0_BASE, getTimerInterrupt);
-}*/
+void timerRun() {
+    // Load the required second count into the timer.
+    MAP_TimerLoadSet(TIMER0_BASE, TIMER_A, REQSECCOUNT);
+
+    // Enable the timer.
+    MAP_TimerEnable(TIMER0_BASE, TIMER_A);
+
+    // Wait for 3 seconds to have the timer delay the system
+    while(MAP_TimerValueGet(TIMER0_BASE, TIMER_A) != REQSECCOUNT) {}
+}
