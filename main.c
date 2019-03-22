@@ -94,6 +94,8 @@ int main(void)
     systemClock = MAP_SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN |
                                           SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480),
                                           120000000);
+    // Enable interrupts globally
+    MAP_IntMasterEnable();
 
     uint32_t auxBatVoltage[1];
     uint32_t auxBatAdjusted; //no decimal, accurate value
@@ -401,17 +403,23 @@ void UART7Setup()
 }
 
 void timerSetup() {
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
+    MAP_IntEnable(INT_TIMER0A);
     // Configure the 32-bit periodic timer.
     //MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
     MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_ONE_SHOT);
     MAP_TimerLoadSet(TIMER0_BASE, TIMER_A, REQSECCOUNT);
     // Setup the interrupts for the timer timeouts.
-    //MAP_TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
-    //MAP_IntEnable(INT_TIMER0A);
+    MAP_TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
     // Enable the timers.
     MAP_TimerEnable(TIMER0_BASE, TIMER_A);
 
-    while( MAP_TimerValueGet(TIMER0_BASE, TIMER_A) != 0) {}
+
+    while(MAP_TimerValueGet(TIMER0_BASE, TIMER_A) != REQSECCOUNT) {
+            //int value = MAP_TimerValueGet(TIMER0_BASE, TIMER_A);
+            //int val2 = MAP_TimerLoadGet(TIMER0_BASE, TIMER_A);
+
+    }
 }
 
 /*void TIMER0A_IRQHandler(void)
