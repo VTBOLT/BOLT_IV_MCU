@@ -63,6 +63,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include "uartstdio.h"
 
 uint32_t systemClock;
 
@@ -103,6 +104,15 @@ int main(void)
     uint32_t auxBatVoltage[1];
     uint32_t auxBatAdjusted; //no decimal, accurate value
 
+    // Enables UARTprintf
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
+    MAP_GPIOPinConfigure(GPIO_PA0_U0RX);
+    MAP_GPIOPinConfigure(GPIO_PA1_U0TX);
+    MAP_GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+    UARTStdioConfig(0, 115200, systemClock);
+
+    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0)))
 
     auxADCSetup();
     UART7Setup();
@@ -113,7 +123,7 @@ int main(void)
     // Loop forever.
     while (1)
     {
-
+        //auxADCSend(auxBatVoltage);
         switch(present)
         {
 
@@ -131,19 +141,19 @@ int main(void)
 
 
             // Aux battery voltage stored as volts * 1000
-            //auxBatAdjusted = auxADCSend(auxBatVoltage);
+            auxBatAdjusted = auxADCSend(auxBatVoltage);
 
-            //if (auxBatAdjusted <= 1200) {
+            if (auxBatAdjusted <= 1200) {
 
                 //  Wait 3 seconds to check value, ensure constant value
-                // timerRun();
+                timerRun();
 
-                // auxBatAdjusted = auxADCSend(auxBatVoltage);
-                // if (auxBatAdjusted <= 1200) {
-                    // present = PCB;
-                // }
+                auxBatAdjusted = auxADCSend(auxBatVoltage);
+                if (auxBatAdjusted <= 1200) {
+                    present = PCB;
+                }
 
-            /*} else*/ if (!accPoll()) {
+            } else if (!accPoll()) {
 
                 present = PCB;
 
@@ -168,23 +178,23 @@ int main(void)
                 MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
 
 
-                //auxBatAdjusted = auxADCSend(auxBatVoltage);
+                auxBatAdjusted = auxADCSend(auxBatVoltage);
 
-                //if (auxBatAdjusted <= 1200) {
+                if (auxBatAdjusted <= 1200) {
 
                 //  Wait 3 seconds to check value, ensure constant value
-                    // timerRun();
+                    timerRun();
 
-                    // auxBatAdjusted = auxADCSend(auxBatVoltage);
-                    // if (auxBatAdjusted <= 1200) {
-                        // present = ACC;
-                    // }
+                    auxBatAdjusted = auxADCSend(auxBatVoltage);
+                    if (auxBatAdjusted <= 1200) {
+                        present = ACC;
+                    }
 
                 //} else if (/*Low pump current*/) {
 
                     //present = ACC;
 
-                /*} else*/ if (!ignitPoll()) {
+                } else if (!ignitPoll()) {
 
                     present = ACC;
 
@@ -358,6 +368,12 @@ void auxADCSetup()
 
 uint32_t auxADCSend(uint32_t* auxBatVoltage)
 {
+    /* BUG
+     * @ 12 V in, this function outputs 1120 (11.2V)
+     * This is safe so long as we're underestimating
+     * Consider for future revisions
+     */
+
     /* AUX ADC */
     MAP_ADCProcessorTrigger(ADC0_BASE, 3);
     while(!MAP_ADCIntStatus(ADC0_BASE, 3, false)) {}
@@ -371,6 +387,8 @@ uint32_t auxADCSend(uint32_t* auxBatVoltage)
     tempFloat *= 0.004152;
     uint32_t temp = tempFloat * 100;
     uint32_t toReturn = temp;
+
+    UARTprintf("AUX: %d\n", temp);
 
     asciiChars[4] = temp % 10 + '0';
     temp /= 10;
