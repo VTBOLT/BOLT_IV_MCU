@@ -187,7 +187,16 @@ int main(void)
                 /*} else*/ if (!ignitPoll()) {
 
                     present = ACC;
+
+                } else if (!accPoll()) {
+
+                    present = ACC;
+
                 }
+
+            } else {
+
+                present = ACC;
             }
             break;
 
