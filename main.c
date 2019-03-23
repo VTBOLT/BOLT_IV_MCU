@@ -384,10 +384,11 @@ uint32_t auxADCSend(uint32_t* auxBatVoltage)
     float tempFloat = auxBatVoltage[0];
 
     // From ((v/1000)/1.265)/.1904 - see spreadsheet
-    tempFloat *= 0.004152;
+    tempFloat *= 0.004719;
     uint32_t temp = tempFloat * 100;
     uint32_t toReturn = temp;
 
+    UARTprintf("Zero: %d\n", auxBatVoltage[0]);
     UARTprintf("AUX: %d\n", temp);
 
     asciiChars[4] = temp % 10 + '0';
