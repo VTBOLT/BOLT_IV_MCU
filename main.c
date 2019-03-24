@@ -132,12 +132,18 @@ int main(void)
 
             // Output HIGH to ACC Relay
             MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PIN_4);
+            // Output HIGH to ACC Dash
+            MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, GPIO_PIN_6);
 
             // Output LOW to IGN Relay
             MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~GPIO_PIN_0);
+            // Output LOW to IGN Dash
+            MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_7, ~GPIO_PIN_7);
 
             // Output HIGH to PSI LED
             MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
+            // Output HIGH to PSI Dash
+            MAP_GPIOPinWrite(GPIO_PORTM_BASE, GPIO_PIN_2, GPIO_PIN_2);
 
 
             // Aux battery voltage stored as volts * 1000
@@ -170,12 +176,18 @@ int main(void)
 
                 // Output HIGH to ACC Relay
                 MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PIN_4);
+                // Output HIGH to ACC Dash
+                MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, GPIO_PIN_6);
 
                 // Output HIGH to IGN Relay
                 MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, GPIO_PIN_0);
+                // Output HIGH to IGN Dash
+                MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_7, GPIO_PIN_7);
 
                 // Output HIGH to PSI LED
                 MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
+                // Output HIGH to PSI LED
+                MAP_GPIOPinWrite(GPIO_PORTM_BASE, GPIO_PIN_2, GPIO_PIN_2);
 
 
                 auxBatAdjusted = auxADCSend(auxBatVoltage);
@@ -215,12 +227,19 @@ int main(void)
 
             // Output LOW to ACC Relay
             MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~GPIO_PIN_4);
+            // Output LOW to ACC Dash
+            MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, ~GPIO_PIN_6);
 
             // Output LOW to IGN Relay
             MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~GPIO_PIN_0);
+            // Output LOW to IGN Dash
+            MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_7, ~GPIO_PIN_7);
 
             // Output LOW to PSI LED
             MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, ~GPIO_PIN_2);
+            //Output LOW to PSI Dash
+            MAP_GPIOPinWrite(GPIO_PORTM_BASE, GPIO_PIN_2, ~GPIO_PIN_2);
+
 
             if (accPoll()) {
                 present = ACC;
@@ -233,6 +252,7 @@ int main(void)
 
 void accIgnDESetup(void)
 {
+    // ACC K6, IGN K7, PSI M2
     /* Enables pins for ACC Tx/Rx, IGN Tx/Rx, ACC/IGN relays and reading from BMS Discharge Enable  */
 
 
@@ -267,6 +287,17 @@ void accIgnDESetup(void)
     /* Then, set them to LOW */
     MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~GPIO_PIN_0);
     MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~GPIO_PIN_4);
+
+    /* Enable the GPIO Pins for the Accessory, Ignition, and PSI Dash outputs.
+    (PK6, PK7, PM2, respectively) */
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTK_BASE, GPIO_PIN_6);
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTK_BASE, GPIO_PIN_7);
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTM_BASE, GPIO_PIN_2);
+
+    /* Then set them to LOW */
+    MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, ~GPIO_PIN_6);
+    MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_7, ~GPIO_PIN_7);
+    MAP_GPIOPinWrite(GPIO_PORTM_BASE, GPIO_PIN_2, ~GPIO_PIN_2);
 
     /* Enable the GPIO pins for Ignition and Accessory Rx as inputs.
     (PP3 and PH1, respectively) */
