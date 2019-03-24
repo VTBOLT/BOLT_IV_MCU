@@ -166,7 +166,7 @@ int main(void)
         /* IGN state of FSM */
         case IGN:
 
-            if (DEPoll()) {
+            if (!DEPoll()) {
 
                 // Output HIGH to ACC Relay
                 MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PIN_4);
