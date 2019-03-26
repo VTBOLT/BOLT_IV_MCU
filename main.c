@@ -57,6 +57,7 @@
 ******************************************************************************/
 
 #include "msp.h"
+#include "UARTstdio.h"
 
 /* Standard driverlib include - can be more specific if needed */
 #include <ti/devices/msp432e4/driverlib/driverlib.h>
@@ -85,6 +86,8 @@
 #define lowVoltageBit   4
 #define voltageLength   5
 
+#define UART_2_EN
+
 /* Configure system clock for 120 MHz */
 uint32_t systemClock;
 
@@ -94,11 +97,11 @@ bool errFlag = false;
 uint32_t msgCount = 0;
 
 // CAN data struct
-typedef struct {                         // Multiplication factors (units)
+typedef struct {                         // Multiplication factors (units) from the BMS utility manual
     uint8_t SOC[SOC_length];             // 0.5 (%)
     uint8_t FPV[FPV_length];             // 0.1 (V)
-    uint8_t highTemp[tempLength];        // 1 (degrees C)
-    uint8_t lowTemp[tempLength];         // 1 (degrees C)
+    uint8_t highTemp[tempLength];        // 1 (degrees C) (BOLT3 data indicates 0.1)
+    uint8_t lowTemp[tempLength];         // 1 (degrees C) (BOLT3 data indicates 0.1)
     uint8_t highVoltage[voltageLength];  // 0.0001 (V)
     uint8_t lowVoltage[voltageLength];   // 0.0001 (V)
 } CANTransmitData;
@@ -108,6 +111,7 @@ void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
 void auxADCSetup();
 uint32_t auxADCSend(uint32_t* auxBatVoltage);
 void UART7Setup();
+void enableUARTprintf();
 void switchesSetup(void);
 void ignitPoll(void);
 void accPoll(void);
@@ -116,6 +120,11 @@ void configureCAN();
 void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANdata,
                 uint8_t msgDataIndex, uint8_t* msgData);
 void convertToASCII(uint8_t* chars, uint8_t digits, uint16_t num);
+void enableLEDs();
+void toggleLED1();
+void toggleLED2();
+void toggleLED3();
+void toggleLED4();
 
 
 
@@ -141,6 +150,9 @@ int main(void)
     configureCAN();
     canSetup(&sCANMessage);
 
+    enableUARTprintf();
+
+    enableLEDs();
 
     // Loop forever.
     while (1)
@@ -156,11 +168,29 @@ int main(void)
     }
 }
 
+void enableUARTprintf()
+{
+    /* Enable the GPIO Peripheral used by the UART */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
+    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOD))) {}
+
+    /* Enable UART2 */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART2);
+
+    /* Configure GPIO Pins for UART mode */
+    MAP_GPIOPinConfigure(GPIO_PD4_U2RX);
+    MAP_GPIOPinConfigure(GPIO_PD5_U2TX);
+    MAP_GPIOPinTypeUART(GPIO_PORTD_BASE, GPIO_PIN_4 | GPIO_PIN_5);
+
+    /* Initialize the UART for console I/O */
+    UARTStdioConfig(2, 115200, systemClock);
+}
+
 void canSetup(tCANMsgObject* message)
 {
     /* Enable the clock to the GPIO Port J and wait for it to be ready */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOJ);
-    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOJ)))
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA)))
     {
     }
 
@@ -225,17 +255,17 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANData, uint8_t ms
     /* A new message is received */
     if (rxMsg && cycleMsgs <= 6)
     {
-        // Set rxMsg to false so that the interrupt has as much time as possible
-        // to trigger during the function - could result in weird data if triggered
-        // immediately, while message is being read
-        rxMsg = false;
-
         /* Re-use the same message object that was used earlier to configure
          * the CAN */
         sCANMessage->pui8MsgData = (uint8_t *)&msgData;
 
         /* Read the message from the CAN */
         MAP_CANMessageGet(CAN0_BASE, 1, sCANMessage, 0);
+
+        // Set rxMsg to false since data has been put into the object
+        // The next message will stay in the buffer until CANMessageGet() is called again
+        // The interrupt function sets rxMsg to true to satisfy the if statement
+        rxMsg = false;
 
         /* Check the error flag to see if errors occurred */
         if (sCANMessage->ui32Flags & MSG_OBJ_DATA_LOST)
@@ -246,27 +276,33 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANData, uint8_t ms
         {
             /* Print a message to the console showing the message count and the
              * contents of the received message */
-            //UARTprintf("Received msg 0x%03X: ",sCANMessage->ui32MsgID);
-            uint8_t SOCtemp;
-            uint16_t FPVtemp;
-            uint16_t highTempTemp;
-            uint16_t lowTempTemp;
-            uint16_t highVoltTemp;
-            uint16_t lowVoltTemp;
+            UARTprintf("Received msg 0x%03X: ",sCANMessage->ui32MsgID);
+            static uint8_t SOCtemp = 0;
+            static uint16_t FPVtemp = 0;
+            static uint16_t highTempTemp = 0;
+            static uint16_t lowTempTemp = 0;
+            static uint16_t highVoltTemp = 0;
+            static uint16_t lowVoltTemp = 0;
 
             // Populates the temporary variables
-            if (sCANMessage->ui32MsgID == SOC_ID)
+            if (sCANMessage->ui32MsgID == SOC_ID) {
                 SOCtemp = msgData[SOC_bit];
-            if (sCANMessage->ui32MsgID == FPV_ID)
+            }
+            if (sCANMessage->ui32MsgID == FPV_ID) {
                 FPVtemp = (msgData[FPV_bit+1] << 8) | msgData[FPV_bit];
-            if (sCANMessage->ui32MsgID == highTempID)
+            }
+            if (sCANMessage->ui32MsgID == highTempID) {
                 highTempTemp = (msgData[highTempBit+1] << 8) | msgData[highTempBit];
-            if (sCANMessage->ui32MsgID == lowTempID)
+            }
+            if (sCANMessage->ui32MsgID == lowTempID) {
                 lowTempTemp = (msgData[lowTempBit+1] << 8) | msgData[lowTempBit];
-            if (sCANMessage->ui32MsgID == highVoltageID)
+            }
+            if (sCANMessage->ui32MsgID == highVoltageID) {
                 highVoltTemp = (msgData[highVoltageBit+1] << 8) | msgData[highVoltageBit];
-            if (sCANMessage->ui32MsgID == lowVoltageID)
+            }
+            if (sCANMessage->ui32MsgID == lowVoltageID) {
                 lowVoltTemp = (msgData[lowVoltageBit+1] << 8) | msgData[lowVoltageBit];
+            }
 
             // Processes numbers into ASCII
             convertToASCII(CANData->SOC, 3, SOCtemp);
@@ -281,6 +317,7 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANData, uint8_t ms
     {
         if(errFlag)
         {
+            UARTprintf("Error: Problem while receiving CAN interrupt");
         }
     }
 }
@@ -511,4 +548,52 @@ void CAN0_IRQHandler(void) // Uses CAN0, on J5
     else
     {
     }
+}
+
+void enableLEDs()
+{
+    /* Enable the GPIO port that is used for the on-board LED */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
+
+    /* Check if the peripheral access is enabled */
+    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPION))
+    {
+    }
+
+    /* Check if the peripheral access is enabled */
+    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF))
+    {
+    }
+
+    /* Enable the GPIO pins for the LEDs (PN0 and PN1). Set the direction as output,
+     * and enable the GPIO pin for digital function */
+    MAP_GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0 | GPIO_PIN_1,
+                     ~(GPIO_PIN_0 | GPIO_PIN_1));
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+
+    /* Enable the GPIO pins for the LEDs (PF0 and PF4). Set the direction as output,
+     * and enable the GPIO pin for digital function */
+    MAP_GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_0 | GPIO_PIN_4,
+                     ~(GPIO_PIN_0 | GPIO_PIN_4));
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_0 | GPIO_PIN_4);
+}
+
+void toggleLED1()
+{
+    MAP_GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_1, ~(MAP_GPIOPinRead(GPIO_PORTN_BASE, GPIO_PIN_1)));
+}
+
+void toggleLED2()
+{
+    MAP_GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0, ~(MAP_GPIOPinRead(GPIO_PORTN_BASE, GPIO_PIN_0)));
+}
+
+void toggleLED3()
+{
+    MAP_GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_4, ~(MAP_GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_4)));
+}
+void toggleLED4()
+{
+    MAP_GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_0, ~(MAP_GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_0)));
 }
