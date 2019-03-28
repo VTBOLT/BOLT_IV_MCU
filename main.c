@@ -65,26 +65,28 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-// Set these once they are known
-#define SOC_ID          0x6B0
-#define SOC_bit         4
-#define SOC_length      3
+// ID of each CAN message
+// Byte the message starts at (out of 8)
+// ASCII length of data (1 data bytes -> 3 ASCII bytes, 2 data bytes -> 5 ASCII bytes)
+#define SOC_ID           0x6B0
+#define SOC_byte         4
+#define SOC_length       3
 
-#define FPV_ID          0x6B0
-#define FPV_bit         2
-#define FPV_length      5
+#define FPV_ID           0x6B0
+#define FPV_byte         2
+#define FPV_length       5
 
-#define highTempID      0x6B4
-#define highTempBit     0
-#define lowTempID       0x6B4
-#define lowTempBit      2
-#define tempLength      5
+#define highTempID       0x6B4
+#define highTempByte     0
+#define lowTempID        0x6B4
+#define lowTempByte      2
+#define tempLength       5
 
-#define highVoltageID   0x6B3
-#define highVoltageBit  2
-#define lowVoltageID    0x6B3
-#define lowVoltageBit   4
-#define voltageLength   5
+#define highVoltageID    0x6B3
+#define highVoltageByte  2
+#define lowVoltageID     0x6B3
+#define lowVoltageByte   4
+#define voltageLength    5
 
 #define UART_2_EN
 
@@ -151,6 +153,7 @@ int main(void)
     canSetup(&sCANMessage);
 
     enableUARTprintf();
+    UARTprintf("Starting up\n");
 
     enableLEDs();
 
@@ -161,10 +164,6 @@ int main(void)
         //accPoll();
         //ignitPoll();
         canReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
-
-
-
-
     }
 }
 
@@ -253,71 +252,94 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANData, uint8_t ms
 {
     uint8_t cycleMsgs = 0;
     /* A new message is received */
-    if (rxMsg && cycleMsgs <= 6)
+    while (cycleMsgs <= 6)
     {
-        /* Re-use the same message object that was used earlier to configure
-         * the CAN */
-        sCANMessage->pui8MsgData = (uint8_t *)&msgData;
-
-        /* Read the message from the CAN */
-        MAP_CANMessageGet(CAN0_BASE, 1, sCANMessage, 0);
-
-        // Set rxMsg to false since data has been put into the object
-        // The next message will stay in the buffer until CANMessageGet() is called again
-        // The interrupt function sets rxMsg to true to satisfy the if statement
-        rxMsg = false;
-
-        /* Check the error flag to see if errors occurred */
-        if (sCANMessage->ui32Flags & MSG_OBJ_DATA_LOST)
+        if (rxMsg)
         {
-              UARTprintf("\nCAN message loss detected\n");
+            /* Re-use the same message object that was used earlier to configure
+             * the CAN */
+            sCANMessage->pui8MsgData = (uint8_t *)msgData;
+
+            /* Read the message from the CAN */
+            MAP_CANMessageGet(CAN0_BASE, 1, sCANMessage, 0);
+
+            // Set rxMsg to false since data has been put into the object
+            // The next message will stay in the buffer until CANMessageGet() is called again
+            // The interrupt function sets rxMsg to true to satisfy the if statement
+            rxMsg = false;
+
+            /* Check the error flag to see if errors occurred */
+            if (sCANMessage->ui32Flags & MSG_OBJ_DATA_LOST)
+            {
+                  UARTprintf("\nCAN message loss detected\n");
+            }
+            else
+            {
+                /* Print a message to the console showing the message count and the
+                 * contents of the received message */
+                UARTprintf("Message length: %i \n", sCANMessage->ui32MsgLen);
+                UARTprintf("Received msg 0x%03X: ",sCANMessage->ui32MsgID);
+                for (msgDataIndex = 0; msgDataIndex < sCANMessage->ui32MsgLen;
+                        msgDataIndex++)
+                {
+                    UARTprintf("0x%02X ", msgData[msgDataIndex]);
+                }
+
+                /* Print the count of message sent */
+                UARTprintf(" total count = %u\n", msgCount);
+
+                static uint8_t SOCtemp = 0;
+                static uint16_t FPVtemp = 0;
+                static uint16_t highTempTemp = 0;
+                static uint16_t lowTempTemp = 0;
+                static uint16_t highVoltTemp = 0;
+                static uint16_t lowVoltTemp = 0;
+
+                // Populates the temporary variables
+                if (sCANMessage->ui32MsgID == SOC_ID) {
+                    SOCtemp = msgData[SOC_byte];
+                }
+                if (sCANMessage->ui32MsgID == FPV_ID) {
+                    FPVtemp = (msgData[FPV_byte+1] << 8) | msgData[FPV_byte];
+                }
+                if (sCANMessage->ui32MsgID == highTempID) {
+                    highTempTemp = (msgData[highTempByte+1] << 8) | msgData[highTempByte];
+                }
+                if (sCANMessage->ui32MsgID == lowTempID) {
+                    lowTempTemp = (msgData[lowTempByte+1] << 8) | msgData[lowTempByte];
+                }
+                if (sCANMessage->ui32MsgID == highVoltageID) {
+                    highVoltTemp = (msgData[highVoltageByte+1] << 8) | msgData[highVoltageByte];
+                }
+                if (sCANMessage->ui32MsgID == lowVoltageID) {
+                    lowVoltTemp = (msgData[lowVoltageByte+1] << 8) | msgData[lowVoltageByte];
+                }
+
+                // Processes numbers into ASCII
+                convertToASCII(CANData->SOC, 3, SOCtemp);
+                convertToASCII(CANData->FPV, 5, FPVtemp);
+                convertToASCII(CANData->highTemp, 5, highTempTemp);
+                convertToASCII(CANData->lowTemp, 5, lowTempTemp);
+                convertToASCII(CANData->lowVoltage, 5, lowVoltTemp);
+                convertToASCII(CANData->highVoltage, 5, highVoltTemp);
+
+                // Print to UART console
+
+                UARTprintf("SOC: %c%c%c\n", CANData->SOC[0], CANData->SOC[1], CANData->SOC[2]);
+                UARTprintf("FPV: %c%c%c%c%c\n", CANData->FPV[0], CANData->FPV[1], CANData->FPV[2], CANData->FPV[3], CANData->FPV[4]);
+                UARTprintf("highTemp: %c%c%c%c%c\n", CANData->highTemp[0], CANData->highTemp[1], CANData->highTemp[2], CANData->highTemp[3], CANData->highTemp[4]);
+                UARTprintf("lowTemp: %c%c%c%c%c\n", CANData->lowTemp[0], CANData->lowTemp[1], CANData->lowTemp[2], CANData->lowTemp[3], CANData->lowTemp[4]);
+                UARTprintf("highVoltage: %c%c%c%c%c\n", CANData->highVoltage[0], CANData->highVoltage[1], CANData->highVoltage[2], CANData->highVoltage[3], CANData->highVoltage[4]);
+                UARTprintf("lowVoltage: %c%c%c%c%c\n", CANData->lowVoltage[0], CANData->lowVoltage[1], CANData->lowVoltage[2], CANData->lowVoltage[3], CANData->lowVoltage[4]);
+
+            }
         }
         else
         {
-            /* Print a message to the console showing the message count and the
-             * contents of the received message */
-            UARTprintf("Received msg 0x%03X: ",sCANMessage->ui32MsgID);
-            static uint8_t SOCtemp = 0;
-            static uint16_t FPVtemp = 0;
-            static uint16_t highTempTemp = 0;
-            static uint16_t lowTempTemp = 0;
-            static uint16_t highVoltTemp = 0;
-            static uint16_t lowVoltTemp = 0;
-
-            // Populates the temporary variables
-            if (sCANMessage->ui32MsgID == SOC_ID) {
-                SOCtemp = msgData[SOC_bit];
+            if(errFlag)
+            {
+                UARTprintf("Error: Problem while receiving CAN interrupt");
             }
-            if (sCANMessage->ui32MsgID == FPV_ID) {
-                FPVtemp = (msgData[FPV_bit+1] << 8) | msgData[FPV_bit];
-            }
-            if (sCANMessage->ui32MsgID == highTempID) {
-                highTempTemp = (msgData[highTempBit+1] << 8) | msgData[highTempBit];
-            }
-            if (sCANMessage->ui32MsgID == lowTempID) {
-                lowTempTemp = (msgData[lowTempBit+1] << 8) | msgData[lowTempBit];
-            }
-            if (sCANMessage->ui32MsgID == highVoltageID) {
-                highVoltTemp = (msgData[highVoltageBit+1] << 8) | msgData[highVoltageBit];
-            }
-            if (sCANMessage->ui32MsgID == lowVoltageID) {
-                lowVoltTemp = (msgData[lowVoltageBit+1] << 8) | msgData[lowVoltageBit];
-            }
-
-            // Processes numbers into ASCII
-            convertToASCII(CANData->SOC, 3, SOCtemp);
-            convertToASCII(CANData->FPV, 5, FPVtemp);
-            convertToASCII(CANData->highTemp, 5, highTempTemp);
-            convertToASCII(CANData->lowTemp, 5, lowTempTemp);
-            convertToASCII(CANData->lowVoltage, 5, lowVoltTemp);
-            convertToASCII(CANData->highVoltage, 5, highVoltTemp);
-        }
-    }
-    else
-    {
-        if(errFlag)
-        {
-            UARTprintf("Error: Problem while receiving CAN interrupt");
         }
     }
 }
