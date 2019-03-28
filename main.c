@@ -36,6 +36,8 @@
 *
 * Authors:
 * William Campbell
+* Ethan Brooks
+* Patrick Graybeal
 *
 ******************************************************************************
 *
@@ -65,7 +67,48 @@
 #include <stdio.h>
 #include "uartstdio.h"
 
+// ID of each CAN message
+// Byte the message starts at (out of 8)
+// ASCII length of data (1 data bytes -> 3 ASCII bytes, 2 data bytes -> 5 ASCII bytes)
+#define SOC_ID           0x6B0
+#define SOC_byte         4
+#define SOC_length       3
+
+#define FPV_ID           0x6B0
+#define FPV_byte         2
+#define FPV_length       5
+
+#define highTempID       0x6B4
+#define highTempByte     0
+#define lowTempID        0x6B4
+#define lowTempByte      2
+#define tempLength       5
+
+#define highVoltageID    0x6B3
+#define highVoltageByte  2
+#define lowVoltageID     0x6B3
+#define lowVoltageByte   4
+#define voltageLength    5
+
+#define UART_2_EN
+
+/* Configure system clock for 120 MHz */
 uint32_t systemClock;
+
+/* CAN variables */
+bool rxMsg = false;
+bool errFlag = false;
+uint32_t msgCount = 0;
+
+// CAN data struct
+typedef struct {                         // Multiplication factors (units) from the BMS utility manual
+    uint8_t SOC[SOC_length];             // 0.5 (%)
+    uint8_t FPV[FPV_length];             // 0.1 (V)
+    uint8_t highTemp[tempLength];        // 1 (degrees C) (BOLT3 data indicates 0.1)
+    uint8_t lowTemp[tempLength];         // 1 (degrees C) (BOLT3 data indicates 0.1)
+    uint8_t highVoltage[voltageLength];  // 0.0001 (V)
+    uint8_t lowVoltage[voltageLength];   // 0.0001 (V)
+} CANTransmitData;
 
 typedef enum states { PCB, ACC, IGN, MAX_STATES } states_t;
 // Required second count to delay switching off ACC and IGN if voltage dips below for a brief second.
@@ -87,7 +130,12 @@ void timerRun();
 bool ignitPoll(void);
 bool accPoll(void);
 bool DEPoll(void);
-
+void canSetup(tCANMsgObject* message);
+void configureCAN();
+void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANdata,
+                uint8_t msgDataIndex, uint8_t* msgData);
+void convertToASCII(uint8_t* chars, uint8_t digits, uint16_t num);
+void enableUARTprintf();
 
 int main(void)
 {
@@ -101,29 +149,35 @@ int main(void)
     // Set up the timer system
     timerSetup();
 
+    // Instantiate CAN objects
+    static CANTransmitData CANData;
+    tCANMsgObject sCANMessage;
+    uint8_t msgDataIndex;
+    uint8_t msgData[8] = {0x00, 0x00, 0x00, 0x00,
+                          0x00, 0x00, 0x00, 0x00};
+
+
     uint32_t auxBatVoltage[1];
     uint32_t auxBatAdjusted; //no decimal, accurate value
-
-    // Enables UARTprintf
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
-    MAP_GPIOPinConfigure(GPIO_PA0_U0RX);
-    MAP_GPIOPinConfigure(GPIO_PA1_U0TX);
-    MAP_GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
-    UARTStdioConfig(0, 115200, systemClock);
 
     while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0)))
 
     auxADCSetup();
     UART7Setup();
     accIgnDESetup();
+    configureCAN();
+    canSetup(&sCANMessage);
+
+    enableUARTprintf();
+    UARTprintf("Starting up\n");
 
     states_t present = PCB;
 
     // Loop forever.
     while (1)
     {
-        //auxADCSend(auxBatVoltage);
+        // As long as the PCB is on, CAN should be read
+        canReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
         switch(present)
         {
 
@@ -472,4 +526,233 @@ void timerRun() {
 
     // Wait for 3 seconds to have the timer delay the system
     while(MAP_TimerValueGet(TIMER0_BASE, TIMER_A) != REQSECCOUNT) {}
+}
+
+void enableUARTprintf()
+{
+    /* Enable the GPIO Peripheral used by the UART */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
+    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOD))) {}
+
+    /* Enable UART2 */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART2);
+
+    /* Configure GPIO Pins for UART mode */
+    MAP_GPIOPinConfigure(GPIO_PD4_U2RX);
+    MAP_GPIOPinConfigure(GPIO_PD5_U2TX);
+    MAP_GPIOPinTypeUART(GPIO_PORTD_BASE, GPIO_PIN_4 | GPIO_PIN_5);
+
+    /* Initialize the UART for console I/O */
+    UARTStdioConfig(2, 115200, systemClock);
+}
+
+void canSetup(tCANMsgObject* message)
+{
+    /* Enable the clock to the GPIO Port J and wait for it to be ready */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA)))
+    {
+    }
+
+    /* Initialize the CAN */
+    configureCAN();
+
+    /* Initialize message object 1 to be able to receive any CAN message ID.
+     * In order to receive any CAN ID, the ID and mask must both be set to 0,
+     * and the ID filter enabled */
+    message->ui32MsgID = 0;
+    message->ui32MsgIDMask = 0;
+
+    /* Enable interrupt on RX and Filter ID */
+    message->ui32Flags = MSG_OBJ_RX_INT_ENABLE | MSG_OBJ_USE_ID_FILTER;
+
+    /* Size of message is 8 */
+    message->ui32MsgLen = 8; //could also be sizeof(msgData)
+
+    /* Load the message object into the CAN peripheral. Once loaded an
+     * interrupt will occur any time a CAN message is received. Use message
+     * object 1 for receiving messages */
+    MAP_CANMessageSet(CAN0_BASE, 1, message, MSG_OBJ_TYPE_RX);
+}
+
+void configureCAN(void)
+{
+    /* Configure the CAN and its pins PA0 and PA1 @ 500Kbps */
+
+    /* Enable the clock to the GPIO Port A and wait for it to be ready */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA)))
+    {
+    }
+
+    /* Enable CAN0 */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_CAN0);
+
+    /* Configure GPIO Pins for CAN mode */
+    MAP_GPIOPinConfigure(GPIO_PA0_CAN0RX);
+    MAP_GPIOPinConfigure(GPIO_PA1_CAN0TX);
+    MAP_GPIOPinTypeCAN(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+
+    /* Initialize the CAN controller */
+    MAP_CANInit(CAN0_BASE);
+
+    /* Set up the bit rate for the CAN bus.  CAN bus is set to 500 Kbps */
+    MAP_CANBitRateSet(CAN0_BASE, systemClock, 500000);
+
+    /* Enable interrupts on the CAN peripheral */
+    MAP_CANIntEnable(CAN0_BASE, CAN_INT_MASTER | CAN_INT_ERROR | CAN_INT_STATUS);
+
+    /* Enable the CAN interrupt */
+    MAP_IntEnable(INT_CAN0);
+
+    /* Enable the CAN for operation */
+    MAP_CANEnable(CAN0_BASE);
+}
+
+void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANData, uint8_t msgDataIndex, uint8_t* msgData)
+{
+    uint8_t cycleMsgs = 0;
+    /* A new message is received */
+    while (cycleMsgs <= 6)
+    {
+        if (rxMsg)
+        {
+            /* Re-use the same message object that was used earlier to configure
+             * the CAN */
+            sCANMessage->pui8MsgData = (uint8_t *)msgData;
+
+            /* Read the message from the CAN */
+            MAP_CANMessageGet(CAN0_BASE, 1, sCANMessage, 0);
+
+            // Set rxMsg to false since data has been put into the object
+            // The next message will stay in the buffer until CANMessageGet() is called again
+            // The interrupt function sets rxMsg to true to satisfy the if statement
+            rxMsg = false;
+
+            /* Check the error flag to see if errors occurred */
+            if (sCANMessage->ui32Flags & MSG_OBJ_DATA_LOST)
+            {
+                  UARTprintf("\nCAN message loss detected\n");
+            }
+            else
+            {
+                /* Print a message to the console showing the message count and the
+                 * contents of the received message */
+                UARTprintf("Message length: %i \n", sCANMessage->ui32MsgLen);
+                UARTprintf("Received msg 0x%03X: ",sCANMessage->ui32MsgID);
+                for (msgDataIndex = 0; msgDataIndex < sCANMessage->ui32MsgLen;
+                        msgDataIndex++)
+                {
+                    UARTprintf("0x%02X ", msgData[msgDataIndex]);
+                }
+
+                /* Print the count of message sent */
+                UARTprintf(" total count = %u\n", msgCount);
+
+                static uint8_t SOCtemp = 0;
+                static uint16_t FPVtemp = 0;
+                static uint16_t highTempTemp = 0;
+                static uint16_t lowTempTemp = 0;
+                static uint16_t highVoltTemp = 0;
+                static uint16_t lowVoltTemp = 0;
+
+                // Populates the temporary variables
+                if (sCANMessage->ui32MsgID == SOC_ID) {
+                    SOCtemp = msgData[SOC_byte];
+                }
+                if (sCANMessage->ui32MsgID == FPV_ID) {
+                    FPVtemp = (msgData[FPV_byte+1] << 8) | msgData[FPV_byte];
+                }
+                if (sCANMessage->ui32MsgID == highTempID) {
+                    highTempTemp = (msgData[highTempByte+1] << 8) | msgData[highTempByte];
+                }
+                if (sCANMessage->ui32MsgID == lowTempID) {
+                    lowTempTemp = (msgData[lowTempByte+1] << 8) | msgData[lowTempByte];
+                }
+                if (sCANMessage->ui32MsgID == highVoltageID) {
+                    highVoltTemp = (msgData[highVoltageByte+1] << 8) | msgData[highVoltageByte];
+                }
+                if (sCANMessage->ui32MsgID == lowVoltageID) {
+                    lowVoltTemp = (msgData[lowVoltageByte+1] << 8) | msgData[lowVoltageByte];
+                }
+
+                // Processes numbers into ASCII
+                convertToASCII(CANData->SOC, 3, SOCtemp);
+                convertToASCII(CANData->FPV, 5, FPVtemp);
+                convertToASCII(CANData->highTemp, 5, highTempTemp);
+                convertToASCII(CANData->lowTemp, 5, lowTempTemp);
+                convertToASCII(CANData->lowVoltage, 5, lowVoltTemp);
+                convertToASCII(CANData->highVoltage, 5, highVoltTemp);
+
+                // Print to UART console
+
+                UARTprintf("SOC: %c%c%c\n", CANData->SOC[0], CANData->SOC[1], CANData->SOC[2]);
+                UARTprintf("FPV: %c%c%c%c%c\n", CANData->FPV[0], CANData->FPV[1], CANData->FPV[2], CANData->FPV[3], CANData->FPV[4]);
+                UARTprintf("highTemp: %c%c%c%c%c\n", CANData->highTemp[0], CANData->highTemp[1], CANData->highTemp[2], CANData->highTemp[3], CANData->highTemp[4]);
+                UARTprintf("lowTemp: %c%c%c%c%c\n", CANData->lowTemp[0], CANData->lowTemp[1], CANData->lowTemp[2], CANData->lowTemp[3], CANData->lowTemp[4]);
+                UARTprintf("highVoltage: %c%c%c%c%c\n", CANData->highVoltage[0], CANData->highVoltage[1], CANData->highVoltage[2], CANData->highVoltage[3], CANData->highVoltage[4]);
+                UARTprintf("lowVoltage: %c%c%c%c%c\n", CANData->lowVoltage[0], CANData->lowVoltage[1], CANData->lowVoltage[2], CANData->lowVoltage[3], CANData->lowVoltage[4]);
+
+            }
+        }
+        else
+        {
+            if(errFlag)
+            {
+                UARTprintf("Error: Problem while receiving CAN interrupt");
+            }
+        }
+    }
+}
+
+void convertToASCII(uint8_t* chars, uint8_t digits, uint16_t num)
+{
+    for ( ; digits > 0; digits--)
+    {
+        chars[digits-1] = num % 10 + '0';
+        num /= 10;
+    }
+}
+
+void CAN0_IRQHandler(void) // Uses CAN0, on J5
+{
+    uint32_t canStatus;
+
+    /* Read the CAN interrupt status to find the cause of the interrupt */
+    canStatus = MAP_CANIntStatus(CAN0_BASE, CAN_INT_STS_CAUSE);
+
+    /* If the cause is a controller status interrupt, then get the status */
+    if(canStatus == CAN_INT_INTID_STATUS)
+    {
+        /* Read the controller status.  This will return a field of status
+         * error bits that can indicate various errors */
+        canStatus = MAP_CANStatusGet(CAN0_BASE, CAN_STS_CONTROL);
+
+        /* Set a flag to indicate some errors may have occurred */
+        errFlag = true;
+    }
+
+    /* Check if the cause is message object 1, which what we are using for
+     * receiving messages */
+    else if(canStatus == 1)
+    {
+        /* Getting to this point means that the RX interrupt occurred on
+         * message object 1, and the message RX is complete.  Clear the
+         * message object interrupt */
+        MAP_CANIntClear(CAN0_BASE, 1);
+
+        /* Increment a counter to keep track of how many messages have been
+         * sent. In a real application this could be used to set flags to
+         * indicate when a message is sent */
+        msgCount++;
+
+        /* Set flag to indicate received message is pending */
+        rxMsg = true;
+
+        /* Since the message was sent, clear any error flags */
+        errFlag = false;
+    }
+    else
+    {
+    }
 }
