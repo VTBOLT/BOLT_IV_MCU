@@ -36,6 +36,8 @@
 *
 * Authors:
 * William Campbell
+* Ethan Brooks
+* Patrick Graybeal
 *
 ******************************************************************************
 *
@@ -57,13 +59,13 @@
 ******************************************************************************/
 
 #include "msp.h"
-#include "UARTstdio.h"
 
 /* Standard driverlib include - can be more specific if needed */
 #include <ti/devices/msp432e4/driverlib/driverlib.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include "uartstdio.h"
 
 // ID of each CAN message
 // Byte the message starts at (out of 8)
@@ -108,27 +110,32 @@ typedef struct {                         // Multiplication factors (units) from 
     uint8_t lowVoltage[voltageLength];   // 0.0001 (V)
 } CANTransmitData;
 
+typedef enum states { PCB, ACC, IGN, MAX_STATES } states_t;
+// Required second count to delay switching off ACC and IGN if voltage dips below for a brief second.
+// We want to calculate the # of cycles to delay x seconds from the formula below:
+// x seconds delay = (# of Cycles) * (1/frequency)
+// So plug in the second count that you want delayed into the formula below:
+// (120MHz)*(x second delay) = # of cycles
+// The current value is for a 3 second delay: (120MHz)*(3s)=360000000
+#define REQSECCOUNT 360000000
+
 // Function prototypes
 void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
 void auxADCSetup();
 uint32_t auxADCSend(uint32_t* auxBatVoltage);
 void UART7Setup();
-void enableUARTprintf();
-void switchesSetup(void);
-void ignitPoll(void);
-void accPoll(void);
+void accIgnDESetup(void);
+void timerSetup();
+void timerRun();
+bool ignitPoll(void);
+bool accPoll(void);
+bool DEPoll(void);
 void canSetup(tCANMsgObject* message);
 void configureCAN();
 void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANdata,
                 uint8_t msgDataIndex, uint8_t* msgData);
 void convertToASCII(uint8_t* chars, uint8_t digits, uint16_t num);
-void enableLEDs();
-void toggleLED1();
-void toggleLED2();
-void toggleLED3();
-void toggleLED4();
-
-
+void enableUARTprintf();
 
 int main(void)
 {
@@ -136,35 +143,389 @@ int main(void)
     systemClock = MAP_SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN |
                                           SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480),
                                           120000000);
+    // Enable interrupts globally
+    MAP_IntMasterEnable();
 
+    // Set up the timer system
+    timerSetup();
+
+    // Instantiate CAN objects
+    static CANTransmitData CANData;
     tCANMsgObject sCANMessage;
     uint8_t msgDataIndex;
     uint8_t msgData[8] = {0x00, 0x00, 0x00, 0x00,
                           0x00, 0x00, 0x00, 0x00};
 
+
     uint32_t auxBatVoltage[1];
     uint32_t auxBatAdjusted; //no decimal, accurate value
 
+    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0)))
 
     auxADCSetup();
     UART7Setup();
-    switchesSetup();
+    accIgnDESetup();
     configureCAN();
     canSetup(&sCANMessage);
 
     enableUARTprintf();
     UARTprintf("Starting up\n");
 
-    enableLEDs();
+    states_t present = PCB;
 
     // Loop forever.
     while (1)
     {
-        static CANTransmitData CANData;
-        //accPoll();
-        //ignitPoll();
+        // As long as the PCB is on, CAN should be read
         canReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
+        switch(present)
+        {
+
+        /* ACC state of FSM */
+        case ACC:
+
+            // Output HIGH to ACC Relay
+            MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PIN_4);
+            // Output HIGH to ACC Dash
+            MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, GPIO_PIN_6);
+
+            // Output LOW to IGN Relay
+            MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~GPIO_PIN_0);
+            // Output LOW to IGN Dash
+            MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_7, ~GPIO_PIN_7);
+
+            // Output HIGH to PSI LED
+            MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
+            // Output HIGH to PSI Dash
+            MAP_GPIOPinWrite(GPIO_PORTM_BASE, GPIO_PIN_2, GPIO_PIN_2);
+
+
+            // Aux battery voltage stored as volts * 1000
+            auxBatAdjusted = auxADCSend(auxBatVoltage);
+
+            if (auxBatAdjusted <= 1200) {
+
+                //  Wait 3 seconds to check value, ensure constant value
+                timerRun();
+
+                auxBatAdjusted = auxADCSend(auxBatVoltage);
+                if (auxBatAdjusted <= 1200) {
+                    present = PCB;
+                }
+
+            } else if (!accPoll()) {
+
+                present = PCB;
+
+            } else if (ignitPoll()){
+
+                present = IGN;
+            }
+            break;
+
+        /* IGN state of FSM */
+        case IGN:
+
+            if (!DEPoll()) {
+
+                // Output HIGH to ACC Relay
+                MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PIN_4);
+                // Output HIGH to ACC Dash
+                MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, GPIO_PIN_6);
+
+                // Output HIGH to IGN Relay
+                MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, GPIO_PIN_0);
+                // Output HIGH to IGN Dash
+                MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_7, GPIO_PIN_7);
+
+                // Output HIGH to PSI LED
+                MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, GPIO_PIN_2);
+                // Output HIGH to PSI LED
+                MAP_GPIOPinWrite(GPIO_PORTM_BASE, GPIO_PIN_2, GPIO_PIN_2);
+
+
+                auxBatAdjusted = auxADCSend(auxBatVoltage);
+
+                if (auxBatAdjusted <= 1200) {
+
+                //  Wait 3 seconds to check value, ensure constant value
+                    timerRun();
+
+                    auxBatAdjusted = auxADCSend(auxBatVoltage);
+                    if (auxBatAdjusted <= 1200) {
+                        present = ACC;
+                    }
+
+                //} else if (/*Low pump current*/) {
+
+                    //present = ACC;
+
+                } else if (!ignitPoll()) {
+
+                    present = ACC;
+
+                } else if (!accPoll()) {
+
+                    present = ACC;
+
+                }
+
+            } else {
+
+                present = ACC;
+            }
+            break;
+
+        /* PCB state of FSM */
+        default:
+
+            // Output LOW to ACC Relay
+            MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~GPIO_PIN_4);
+            // Output LOW to ACC Dash
+            MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, ~GPIO_PIN_6);
+
+            // Output LOW to IGN Relay
+            MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~GPIO_PIN_0);
+            // Output LOW to IGN Dash
+            MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_7, ~GPIO_PIN_7);
+
+            // Output LOW to PSI LED
+            MAP_GPIOPinWrite(GPIO_PORTP_BASE, GPIO_PIN_2, ~GPIO_PIN_2);
+            //Output LOW to PSI Dash
+            MAP_GPIOPinWrite(GPIO_PORTM_BASE, GPIO_PIN_2, ~GPIO_PIN_2);
+
+
+            if (accPoll()) {
+                present = ACC;
+            }
+            break;
+
+        }
     }
+}
+
+void accIgnDESetup(void)
+{
+    // ACC K6, IGN K7, PSI M2
+    /* Enables pins for ACC Tx/Rx, IGN Tx/Rx, ACC/IGN relays and reading from BMS Discharge Enable  */
+
+
+    /* Enable clock to peripherals used (H, K, M, P, Q) */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOH);
+    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOH)){};
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOK);
+    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOK)){};
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
+    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM)){};
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOP);
+    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOP)){};
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOQ);
+    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOQ)){};
+
+
+    /*Enable the GPIO Pins for Ignition and Accessory Tx as outputs.
+    ( PM6 and PQ1, respectively) */
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTM_BASE, GPIO_PIN_6);
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTQ_BASE, GPIO_PIN_1);
+
+    /* Set them to HIGH */
+    MAP_GPIOPinWrite(GPIO_PORTM_BASE, GPIO_PIN_6, GPIO_PIN_6);
+    MAP_GPIOPinWrite(GPIO_PORTQ_BASE, GPIO_PIN_1, GPIO_PIN_1);
+
+    /* Enable the GPIO Pins for the Ignition and Accessory relays as outputs.
+    (PH0 and PK4, respectively) */
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTH_BASE, GPIO_PIN_0);
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTK_BASE, GPIO_PIN_4);
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTP_BASE, GPIO_PIN_2);
+
+    /* Then, set them to LOW */
+    MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~GPIO_PIN_0);
+    MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~GPIO_PIN_4);
+
+    /* Enable the GPIO Pins for the Accessory, Ignition, and PSI Dash outputs.
+    (PK6, PK7, PM2, respectively) */
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTK_BASE, GPIO_PIN_6);
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTK_BASE, GPIO_PIN_7);
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTM_BASE, GPIO_PIN_2);
+
+    /* Then set them to LOW */
+    MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_6, ~GPIO_PIN_6);
+    MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_7, ~GPIO_PIN_7);
+    MAP_GPIOPinWrite(GPIO_PORTM_BASE, GPIO_PIN_2, ~GPIO_PIN_2);
+
+    /* Enable the GPIO pins for Ignition and Accessory Rx as inputs.
+    (PP3 and PH1, respectively) */
+    MAP_GPIOPinTypeGPIOInput(GPIO_PORTP_BASE, GPIO_PIN_3);
+    MAP_GPIOPinTypeGPIOInput(GPIO_PORTH_BASE, GPIO_PIN_1);
+
+    /* Enable the GPIO pin for BMS Discharge Enable as input.
+    (PP2) */
+    MAP_GPIOPinTypeGPIOInput(GPIO_PORTM_BASE, GPIO_PIN_1);
+
+    /* Then, enable the MCU's pull-down resistors on each to prevent noise */
+    GPIOP->PDR |= GPIO_PIN_3;
+    GPIOH->PDR |= GPIO_PIN_1;
+
+    /* Enable MCU's pull-up resistor on PM1 for reading from BMS Discharge Enable */
+    GPIOM->PUR |= GPIO_PIN_1;
+}
+
+bool accPoll(void)
+{
+    /* Return TRUE if acc Rx reads HIGH and FALSE if acc Rx reads LOW.
+       As a note: ACC Rx: PH1, ACC Relay: PK4 */
+
+    if (MAP_GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_1) == GPIO_PIN_1) {
+        return true;
+    } else {
+        return false;
+    }
+
+}
+
+bool ignitPoll(void)
+{
+    /* Return TRUE if ignition Rx reads HIGH and FALSE if ignition Rx reads LOW
+       As a note: IGN Rx: PP3, IGN Relay: PH0 */
+
+    if (  MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3) == GPIO_PIN_3) {
+        return true;
+    } else {
+        return false;
+    }
+
+}
+
+bool DEPoll(void)
+{
+    /* Poll if the bike is able to be discharged.
+       Return TRUE if so, return FALSE otherwise. */
+
+    /* DE is read from PM1. Pull-up resistor is enabled on PM1 since
+       the BMS grounds PM1 when the bike can discharge. */
+    if (MAP_GPIOPinRead(GPIO_PORTM_BASE, GPIO_PIN_1) == GPIO_PIN_1) {
+        return false;
+    } else {
+        return true;
+    }
+
+}
+
+void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count)
+{
+    //
+    // Loop while there are more characters to send.
+    //
+    while(ui32Count--)
+    {
+        //
+        // Write the next character to the UART.
+        //
+        MAP_UARTCharPutNonBlocking(UART7_BASE, *pui8Buffer++);
+    }
+}
+
+void auxADCSetup()
+{
+    /* AUX ADC SETUP - built using adc0_singleended_singlechannel_singleseq */
+
+    /* Enable the clock to GPIO Port E and wait for it to be ready */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
+    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE))) {};
+
+    /* Configure PE0 as ADC input channel */
+    MAP_GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_0);
+
+    /* Enable the clock to ADC0 and wait for it to be ready */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC0);
+    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0))) {};
+
+    /* Configure Sequencer 3 to sample a single analog channel: AIN3 */
+    MAP_ADCSequenceStepConfigure(ADC0_BASE, 3, 0, ADC_CTL_CH3 | ADC_CTL_IE | ADC_CTL_END);
+
+    /* Configure and enable sample sequence 3 with a processor signal trigger */
+    MAP_ADCSequenceConfigure(ADC0_BASE, 3, ADC_TRIGGER_PROCESSOR, 0);
+    MAP_ADCSequenceEnable(ADC0_BASE, 3);
+
+    /* Clear interrupt status flag */
+    MAP_ADCIntClear(ADC0_BASE, 3);
+}
+
+uint32_t auxADCSend(uint32_t* auxBatVoltage)
+{
+    /* BUG
+     * @ 12 V in, this function outputs 1120 (11.2V)
+     * This is safe so long as we're underestimating
+     * Consider for future revisions
+     */
+
+    /* AUX ADC */
+    MAP_ADCProcessorTrigger(ADC0_BASE, 3);
+    while(!MAP_ADCIntStatus(ADC0_BASE, 3, false)) {}
+    MAP_ADCIntClear(ADC0_BASE, 3);
+    MAP_ADCSequenceDataGet(ADC0_BASE, 3, auxBatVoltage);
+
+    uint8_t asciiChars[5];
+    float tempFloat = auxBatVoltage[0];
+
+    // From ((v/1000)/1.265)/.1904 - see spreadsheet
+    tempFloat *= 0.004719;
+    uint32_t temp = tempFloat * 100;
+    uint32_t toReturn = temp;
+
+    UARTprintf("Zero: %d\n", auxBatVoltage[0]);
+    UARTprintf("AUX: %d\n", temp);
+
+    asciiChars[4] = temp % 10 + '0';
+    temp /= 10;
+    asciiChars[3] = temp % 10 + '0';
+    temp /= 10;
+    asciiChars[2] = '.';
+    asciiChars[1] = temp % 10 + '0';
+    temp /= 10;
+    asciiChars[0] = temp % 10 + '0';
+
+    UARTSend((uint8_t *)"AUX:", 4);
+    UARTSend(asciiChars, 5);
+    UARTSend((uint8_t *)"\n", 1);
+
+    return toReturn;
+}
+
+void UART7Setup()
+{
+    /* UART Transmit Setup */
+
+    /* Enable clock to peripherals used */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART7);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
+
+    /* Set PC4 and PC5 as UART pins */
+    GPIOPinConfigure(GPIO_PC4_U7RX);
+    GPIOPinConfigure(GPIO_PC5_U7TX);
+    MAP_GPIOPinTypeUART(GPIO_PORTC_BASE, GPIO_PIN_4 | GPIO_PIN_5);
+
+    /* Configure UART for 57,600, 8-N-1 */
+    MAP_UARTConfigSetExpClk(UART7_BASE, systemClock, 57600,
+                            UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE);
+}
+
+void timerSetup() {
+    // Set the 32-bit timer Peripheral.
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
+    // Configure the timer to be one-shot.
+    MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_ONE_SHOT);
+}
+
+void timerRun() {
+    // Load the required second count into the timer.
+    MAP_TimerLoadSet(TIMER0_BASE, TIMER_A, REQSECCOUNT);
+
+    // Enable the timer.
+    MAP_TimerEnable(TIMER0_BASE, TIMER_A);
+
+    // Wait for 3 seconds to have the timer delay the system
+    while(MAP_TimerValueGet(TIMER0_BASE, TIMER_A) != REQSECCOUNT) {}
 }
 
 void enableUARTprintf()
@@ -344,182 +705,6 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANData, uint8_t ms
     }
 }
 
-void switchesSetup(void)
-{
-    /* Enables pins for ACC Tx/Rx, IGN Tx/Rx and the ACC/IGN relays */
-
-
-    /* Enable clock peripherals used
-    (H, K, M, P, Q) */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOH);
-    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOH)){};
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOK);
-    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOK)){};
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
-    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM)){};
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOP);
-    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOP)){};
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOQ);
-    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOQ)){};
-
-
-    /*Enable the GPIO Pins for Ignition and Accessory Tx as outputs.
-    ( PM6 and PQ1, respectively) */
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTM_BASE, GPIO_PIN_6);
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTQ_BASE, GPIO_PIN_1);
-
-    /* Set them to HIGH */
-    MAP_GPIOPinWrite(GPIO_PORTM_BASE, GPIO_PIN_6, GPIO_PIN_6);
-    MAP_GPIOPinWrite(GPIO_PORTQ_BASE, GPIO_PIN_1, GPIO_PIN_1);
-
-    /* Enable the GPIO Pins for the Ignition and Accessory relays as outputs.
-    (PH0 and PK4, respectively) */
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTH_BASE, GPIO_PIN_0);
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTK_BASE, GPIO_PIN_4);
-
-    /* Then, set them to LOW */
-    MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~GPIO_PIN_0);
-    MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~GPIO_PIN_4);
-
-    /* Enable the GPIO pins for Ignition and Accessory Rx as inputs.
-    (PP3 and PH1, respectively) */
-    MAP_GPIOPinTypeGPIOInput(GPIO_PORTP_BASE, GPIO_PIN_3);
-    MAP_GPIOPinTypeGPIOInput(GPIO_PORTH_BASE, GPIO_PIN_1);
-
-    /* Then, enable the MCU's pull-down resistors on each to prevent noise */
-    GPIOP->PDR |= GPIO_PIN_3;
-    GPIOH->PDR |= GPIO_PIN_1;
-}
-
-void accPoll(void)
-{
-    /* Poll if accessory Rx is HIGH. If so, output HIGH to accessory relay.
-    Else, keep output to accessory relay LOW.
-    Return whether accessory Rx reads HIGH or LOW as bit packed byte */
-
-    // bool input = MAP_GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_1);
-
-    // Accessory switch, Rx: PH1, Relay Output: PK4
-    if (MAP_GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_1) == GPIO_PIN_1) {
-        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PIN_4);
-    } else {
-        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~(GPIO_PIN_4));
-    }
-
-    // return input;
-
-}
-
-void ignitPoll(void)
-{
-    /* Poll if ignition Rx is HIGH. If so, output HIGH to ignition relay.
-    Else, keep output to ignition relay LOW.
-    Return whether ignition Rx reads HIGH or LOW as bit packed byte */
-
-
-    // bool input = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3);
-
-    // Ignition switch, Rx: PP3, Relay Output: PH0
-    if (  MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3) == GPIO_PIN_3) {
-        MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, GPIO_PIN_0);
-    } else {
-        MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~(GPIO_PIN_0));
-    }
-
-    // return input;
-
-}
-
-void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count)
-{
-    //
-    // Loop while there are more characters to send.
-    //
-    while(ui32Count--)
-    {
-        //
-        // Write the next character to the UART.
-        //
-        MAP_UARTCharPut(UART7_BASE, *pui8Buffer++);
-    }
-}
-
-void auxADCSetup()
-{
-    /* AUX ADC SETUP - built using adc0_singleended_singlechannel_singleseq */
-
-    /* Enable the clock to GPIO Port E and wait for it to be ready */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
-    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE))) {};
-
-    /* Configure PE0 as ADC input channel */
-    MAP_GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_0);
-
-    /* Enable the clock to ADC0 and wait for it to be ready */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC0);
-    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0))) {};
-
-    /* Configure Sequencer 3 to sample a single analog channel: AIN3 */
-    MAP_ADCSequenceStepConfigure(ADC0_BASE, 3, 0, ADC_CTL_CH3 | ADC_CTL_IE | ADC_CTL_END);
-
-    /* Configure and enable sample sequence 3 with a processor signal trigger */
-    MAP_ADCSequenceConfigure(ADC0_BASE, 3, ADC_TRIGGER_PROCESSOR, 0);
-    MAP_ADCSequenceEnable(ADC0_BASE, 3);
-
-    /* Clear interrupt status flag */
-    MAP_ADCIntClear(ADC0_BASE, 3);
-}
-
-uint32_t auxADCSend(uint32_t* auxBatVoltage)
-{
-    /* AUX ADC */
-    MAP_ADCProcessorTrigger(ADC0_BASE, 3);
-    while(!MAP_ADCIntStatus(ADC0_BASE, 3, false)) {}
-    MAP_ADCIntClear(ADC0_BASE, 3);
-    MAP_ADCSequenceDataGet(ADC0_BASE, 3, auxBatVoltage);
-
-    uint8_t asciiChars[5];
-    float tempFloat = auxBatVoltage[0];
-
-    // From ((v/1000)/1.265)/.1904 - see spreadsheet
-    tempFloat *= 0.004152;
-    uint32_t temp = tempFloat * 100;
-    uint32_t toReturn = temp;
-
-    asciiChars[4] = temp % 10 + '0';
-    temp /= 10;
-    asciiChars[3] = temp % 10 + '0';
-    temp /= 10;
-    asciiChars[2] = '.';
-    asciiChars[1] = temp % 10 + '0';
-    temp /= 10;
-    asciiChars[0] = temp % 10 + '0';
-
-    UARTSend((uint8_t *)"AUX:", 4);
-    UARTSend(asciiChars, 5);
-    UARTSend((uint8_t *)"\n", 1);
-
-    return toReturn;
-}
-
-void UART7Setup()
-{
-    /* UART Transmit Setup */
-
-    /* Enable clock to peripherals used */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART7);
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
-
-    /* Set PC4 and PC5 as UART pins */
-    GPIOPinConfigure(GPIO_PC4_U7RX);
-    GPIOPinConfigure(GPIO_PC5_U7TX);
-    MAP_GPIOPinTypeUART(GPIO_PORTC_BASE, GPIO_PIN_4 | GPIO_PIN_5);
-
-    /* Configure UART for 57,600, 8-N-1 */
-    MAP_UARTConfigSetExpClk(UART7_BASE, systemClock, 57600,
-                            UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE);
-}
-
 void convertToASCII(uint8_t* chars, uint8_t digits, uint16_t num)
 {
     for ( ; digits > 0; digits--)
@@ -570,52 +755,4 @@ void CAN0_IRQHandler(void) // Uses CAN0, on J5
     else
     {
     }
-}
-
-void enableLEDs()
-{
-    /* Enable the GPIO port that is used for the on-board LED */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
-
-    /* Check if the peripheral access is enabled */
-    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPION))
-    {
-    }
-
-    /* Check if the peripheral access is enabled */
-    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF))
-    {
-    }
-
-    /* Enable the GPIO pins for the LEDs (PN0 and PN1). Set the direction as output,
-     * and enable the GPIO pin for digital function */
-    MAP_GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0 | GPIO_PIN_1,
-                     ~(GPIO_PIN_0 | GPIO_PIN_1));
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_0 | GPIO_PIN_1);
-
-    /* Enable the GPIO pins for the LEDs (PF0 and PF4). Set the direction as output,
-     * and enable the GPIO pin for digital function */
-    MAP_GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_0 | GPIO_PIN_4,
-                     ~(GPIO_PIN_0 | GPIO_PIN_4));
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_0 | GPIO_PIN_4);
-}
-
-void toggleLED1()
-{
-    MAP_GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_1, ~(MAP_GPIOPinRead(GPIO_PORTN_BASE, GPIO_PIN_1)));
-}
-
-void toggleLED2()
-{
-    MAP_GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0, ~(MAP_GPIOPinRead(GPIO_PORTN_BASE, GPIO_PIN_0)));
-}
-
-void toggleLED3()
-{
-    MAP_GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_4, ~(MAP_GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_4)));
-}
-void toggleLED4()
-{
-    MAP_GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_0, ~(MAP_GPIOPinRead(GPIO_PORTF_BASE, GPIO_PIN_0)));
 }
