@@ -59,45 +59,46 @@
 #include "msp.h"
 
 /* Standard driverlib include - can be more specific if needed */
-#include <ti/devices/msp432e4/driverlib/driverlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include "ti/devices/msp432e4/driverlib/driverlib.h"
 
-// Set these once they are known
-#define SOC_ID          0x6B0
-#define SOC_bit         4
-#define SOC_length      1
 
-#define FPV_ID          0x6B0
-#define FPV_bit         2
-#define FPV_length      2
+//*****************************************************************************
+//
+// The error routine that is called if the driver library encounters an error.
+//
+//*****************************************************************************
+#ifdef DEBUG
+void
+__error__(char *pcFilename, uint32_t ui32Line)
+{
+    while(1);
+}
+#endif
 
-#define highTempID      0x6B4
-#define highTempBit     0
-#define lowTempID       0x6B4
-#define lowTempBit      2
-#define tempLength      2
-
-#define highVoltageID   0x6B3
-#define highVoltageBit  2
-#define lowVoltageID    0x6B3
-#define lowVoltageBit   4
-#define voltageLength   4
-
-#define imuLength		4
+#define FPV_length      6
+#define tempLength      6
+#define voltageLength   6
+#define imuLength		6
+#define SOC_length		6
 
 /* Configure system clock for 120 MHz */
 uint32_t systemClock;
 
-/* CAN variables */
-bool rxMsg = false;
-bool errFlag = false;
-uint32_t msgCount = 0;
+//*****************************************************************************
+//
+// Flags that contain the current value of the interrupt indicator as displayed
+// on the UART.
+//
+//*****************************************************************************
 
 // CAN data struct
 typedef struct {
-    uint8_t SOC;
+    uint8_t SOC[SOC_length];
     uint8_t FPV[FPV_length];
     uint8_t highTemp[tempLength];
     uint8_t lowTemp[tempLength];
@@ -121,22 +122,32 @@ uint8_t pumpVoltage[voltageLength];
 // AUX pack voltage
 uint8_t auxVoltage[voltageLength];
 
-// Function prototypes
-void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
-void auxADCSetup();
-uint32_t auxADCSend(uint32_t* auxBatVoltage);
+CANTransmitData CANData;
+IMUTransmitData_t IMUData;
+
+// Global variable to count milliseconds
+uint8_t msCount = 0;
+
+// ISR Flags
+uint8_t g_ui8xbeeFlag = 0;
+uint32_t g_ui32Flags;
+
+// function prototypes
+void initTimers();
 void UART7Setup();
-void switchesSetup(void);
-void ignitPoll(void);
-void accPoll(void);
-void canSetup(tCANMsgObject* message);
-void configureCAN();
-void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANdata,
-                uint8_t msgDataIndex, uint8_t* msgData);
+void UARTSend(const uint8_t*, uint32_t);
+void initGPIO();
+void xbeeTransmit(CANTransmitData, IMUTransmitData_t, uint8_t*, uint8_t*);
+void UART_SendComma();
+void TIMER0A_IRQHandler();
+void uintToStr(char*, size_t, uint32_t);
 
 
-
-
+//*****************************************************************************
+//
+// Blink the on-board LED.
+//
+//*****************************************************************************
 int main(void)
 {
     /* Configure system clock for 120 MHz */
@@ -144,364 +155,95 @@ int main(void)
                                           SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480),
                                           120000000);
 
-    tCANMsgObject sCANMessage;
-    uint8_t msgDataIndex;
-    uint8_t msgData[8] = {0x00, 0x00, 0x00, 0x00,
-                          0x00, 0x00, 0x00, 0x00};
+    // Enable processor interrupts.
+    MAP_IntMasterEnable();
 
-    uint32_t auxBatVoltage[1];
-    uint32_t auxBatAdjusted; //no decimal, accurate value
-
-
-    //auxADCSetup();
+    initTimers(systemClock);
+    initGPIO();
     UART7Setup();
-    //switchesSetup();
-    //configureCAN();
-    //canSetup(&sCANMessage);
 
+    memset(&CANData, '\0', sizeof(CANData));
+    memset(&IMUData, '\0', sizeof(IMUData));
 
-    // Loop forever.
-    while (1)
+//    strncpy((char* )CANData.SOC, "50", sizeof(CANData.SOC));
+//    strncpy((char* )CANData.FPV, "300", sizeof(CANData.FPV));
+//    strncpy((char* )CANData.highTemp, "80", sizeof(CANData.highTemp));
+//    strncpy((char* )CANData.lowTemp, "70", sizeof(CANData.lowTemp));
+//    strncpy((char* )CANData.highVoltage, "6.8", sizeof(CANData.highVoltage));
+//    strncpy((char* )CANData.lowVoltage, "6.4", sizeof(CANData.lowVoltage));
+//    strncpy((char* )IMUData.xLat, "1.5", sizeof(IMUData.xLat));
+//    strncpy((char* )IMUData.yLat, "1.2", sizeof(IMUData.yLat));
+//    strncpy((char* )IMUData.zLat, "1", sizeof(IMUData.zLat));
+//    strncpy((char* )IMUData.xGyro, "20", sizeof(IMUData.xGyro));
+//    strncpy((char* )IMUData.yGyro, "3", sizeof(IMUData.yGyro));
+//    strncpy((char* )IMUData.zGyro, "0", sizeof(IMUData.zGyro));
+//    strncpy((char* )pumpVoltage, "12", sizeof(pumpVoltage));
+//    strncpy((char* )auxVoltage, "16", sizeof(auxVoltage));
+
+    char temp[20];
+    memset(&temp, '\0', sizeof(temp));
+
+    while(1)
     {
-        static CANTransmitData CANData;
-        static IMUTransmitData_t IMUData;
+    	if (g_ui8xbeeFlag) {
 
-        CANData.SOC = '1';
-        CANData.FPV = "300";
-        CANData.highTemp = "80";
-        CANData.lowTemp = "70";
-        CANData.highVoltage = "6.8";
-        CANData.lowVoltage = "6.4";
+    		//uint32_t msBefore = msCount;
+        	xbeeTransmit(CANData, IMUData, pumpVoltage, auxVoltage);
+        	//uint32_t msAfter = msCount;
 
-        IMUData.xLat = "1.5";
-        IMUData.yLat = "1.2";
-        IMUData.zLat = "1";
-        IMUData.xGyro = "20";
-        IMUData.yGyro = "3";
-        IMUData.zGyro = "0";
+        	//uintToStr(temp, sizeof(temp), msBefore);
+        	//UARTSend((uint8_t *)temp, sizeof(temp));
+        	//uintToStr(temp, sizeof(temp), msAfter);
+        	//UARTSend((uint8_t *)temp, sizeof(temp));
 
-        pumpVoltage = "12";
-
-        auxVoltage = "16"
-
-
-        //accPoll();
-        //ignitPoll();
-        //canReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
-        xbeeTransmit(CANData, IMUData, pumpVoltage, auxVoltage);
-
+        	g_ui8xbeeFlag = 0;
+    	}
     }
 }
 
-void xbeeTransmit(const CANTransmitData CANData, const IMUTransmitData_t IMUData, const uint8_t pumpVoltage, const uint8_t auxVoltage)
+void uintToStr(char* buf, size_t sz, uint32_t num)
 {
-	// Send CAN Data
-	UARTSend(CANData.SOC, sizeof(CANData.SOC));
-	UARTSend(CANData.FPV, sizeof(CANData.FPV));
-	UARTSend(CANData.highTemp, sizeof(CANData.highTemp));
-	UARTSend(CANData.lowTemp, sizeof(CANData.lowTemp));
-	UARTSend(CANData.highVoltage, sizeof(CANData.highVoltage));
-	UARTSend(CANData.lowVoltage, sizeof(CANData.lowVoltage));
+    char* temp = (char *)malloc(sz*sizeof(char));
+	char* delptr = temp;
+	char* src = buf;
 
-	// Send Pump Voltage
-	UARTSend(pumpVoltage, sizeof(pumpVoltage));
+	do *temp++ = num % 10 + '0';
+	while ((num /= 10) >= 10);
+	*temp = num % 10 + '0';
 
-	// Send AUX pack voltage
-	UARTSend(auxVoltage, sizeof(auxVoltage));
-
-	// Send IMU Data
-	UARTSend(IMUData.xLat, sizeof(IMUData.xLat));
-	UARTSend(IMUData.yLat, sizeof(IMUData.yLat));
-	UARTSend(IMUData.zLat, sizeof(IMUData.zLat));
-	UARTSend(IMUData.xGyro, sizeof(IMUData.xGyro));
-	UARTSend(IMUData.yGyro, sizeof(IMUData.yGyro));
-	UARTSend(IMUData.zGyro, sizeof(IMUData.zGyro));
+    while ((*src++ = *temp--) && --sz);
+    if (sz-- > 1) do *src++ = '\0'; while (--sz);
+    free(delptr);
 }
 
-void canSetup(tCANMsgObject* message)
+void initTimers(uint32_t sysClock)
 {
-    /* Enable the clock to the GPIO Port J and wait for it to be ready */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOJ);
-    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOJ)))
-    {
-    }
+    // Enable the peripherals used by this example.
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
 
-    /* Initialize the CAN */
-    configureCAN();
+    // Configure timer 0
+    MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_PERIODIC);
+    MAP_TimerLoadSet(TIMER0_BASE, TIMER_A, sysClock / 1000);
 
-    /* Initialize message object 1 to be able to receive any CAN message ID.
-     * In order to receive any CAN ID, the ID and mask must both be set to 0,
-     * and the ID filter enabled */
-    message->ui32MsgID = 0;
-    message->ui32MsgIDMask = 0;
+    // Setup the interrupts for the timer timeouts.
+    MAP_IntEnable(INT_TIMER0A);
+    MAP_TimerIntEnable(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
 
-    /* Enable interrupt on RX and Filter ID */
-    message->ui32Flags = MSG_OBJ_RX_INT_ENABLE | MSG_OBJ_USE_ID_FILTER;
-
-    /* Size of message is 8 */
-    message->ui32MsgLen = 8; //could also be sizeof(msgData)
-
-    /* Load the message object into the CAN peripheral. Once loaded an
-     * interrupt will occur any time a CAN message is received. Use message
-     * object 1 for receiving messages */
-    MAP_CANMessageSet(CAN0_BASE, 1, message, MSG_OBJ_TYPE_RX);
+    // Enable the timers.
+    MAP_TimerEnable(TIMER0_BASE, TIMER_A);
 }
 
-void configureCAN(void)
+void initGPIO()
 {
-    /* Configure the CAN and its pins PA0 and PA1 @ 500Kbps */
+    // Enable the GPIO port that is used for the on-board LED.
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
 
-    /* Enable the clock to the GPIO Port A and wait for it to be ready */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
-    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA)))
-    {
-    }
+    // Check if the peripheral access is enabled.
+    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPION));
 
-    /* Enable CAN0 */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_CAN0);
-
-    /* Configure GPIO Pins for CAN mode */
-    MAP_GPIOPinConfigure(GPIO_PA0_CAN0RX);
-    MAP_GPIOPinConfigure(GPIO_PA1_CAN0TX);
-    MAP_GPIOPinTypeCAN(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
-
-    /* Initialize the CAN controller */
-    MAP_CANInit(CAN0_BASE);
-
-    /* Set up the bit rate for the CAN bus.  CAN bus is set to 500 Kbps */
-    MAP_CANBitRateSet(CAN0_BASE, systemClock, 500000);
-
-    /* Enable interrupts on the CAN peripheral */
-    MAP_CANIntEnable(CAN0_BASE, CAN_INT_MASTER | CAN_INT_ERROR | CAN_INT_STATUS);
-
-    /* Enable the CAN interrupt */
-    MAP_IntEnable(INT_CAN0);
-
-    /* Enable the CAN for operation */
-    MAP_CANEnable(CAN0_BASE);
-}
-
-void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANData, uint8_t msgDataIndex, uint8_t* msgData)
-{
-    uint8_t cycleMsgs = 0;
-    /* A new message is received */
-    if (rxMsg && cycleMsgs <= 6)
-    {
-        // Set rxMsg to false so that the interrupt has as much time as possible
-        // to trigger during the function - could result in weird data if triggered
-        // immediately, while message is being read
-        rxMsg = false;
-
-        /* Re-use the same message object that was used earlier to configure
-         * the CAN */
-        sCANMessage->pui8MsgData = (uint8_t *)&msgData;
-
-        /* Read the message from the CAN */
-        MAP_CANMessageGet(CAN0_BASE, 1, sCANMessage, 0);
-
-        /* Check the error flag to see if errors occurred */
-        if (sCANMessage->ui32Flags & MSG_OBJ_DATA_LOST)
-        {
-              UARTprintf("\nCAN message loss detected\n");
-        }
-        else
-        {
-            /* Print a message to the console showing the message count and the
-             * contents of the received message */
-            // [1] is set before [0] because the BMS sends in big-endian, but
-            // the MSP432 is little-endian
-            UARTprintf("Received msg 0x%03X: ",sCANMessage->ui32MsgID);
-                if (sCANMessage->ui32MsgID == SOC_ID)
-                    CANData->SOC = msgData[SOC_bit];
-                else if (sCANMessage->ui32MsgID == FPV_ID) {
-                    CANData->FPV[1] = msgData[FPV_bit];
-                    CANData->FPV[0] = msgData[FPV_bit+1];
-                }
-                else if (sCANMessage->ui32MsgID == highTempID) {
-                    CANData->highTemp[1] = msgData[highTempBit];
-                    CANData->highTemp[0] = msgData[highTempBit+1];
-                }
-                else if (sCANMessage->ui32MsgID == lowTempID) {
-                    CANData->lowTemp[1] = msgData[lowTempBit];
-                    CANData->lowTemp[0] = msgData[lowTempBit+1];
-                }
-                else if (sCANMessage->ui32MsgID == highVoltageID) {
-                    CANData->highVoltage[1] = msgData[highVoltageBit];
-                    CANData->highVoltage[0] = msgData[highVoltageBit+1];
-                }
-                else if (sCANMessage->ui32MsgID = lowVoltageID) {
-                    CANData->lowVoltage[1] = msgData[lowVoltageBit];
-                    CANData->lowVoltage[0] = msgData[lowVoltageBit+1];
-                }
-
-            /* Print the count of message sent */
-            //UARTprintf(" total count = %u\n", msgCount);
-        }
-    }
-    else
-    {
-        if(errFlag)
-        {
-        }
-    }
-}
-
-void switchesSetup(void)
-{
-    /* Enables pins for ACC Tx/Rx, IGN Tx/Rx and the ACC/IGN relays */
-
-
-    /* Enable clock peripherals used
-    (H, K, M, P, Q) */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOH);
-    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOH)){};
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOK);
-    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOK)){};
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
-    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM)){};
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOP);
-    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOP)){};
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOQ);
-    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOQ)){};
-
-
-    /*Enable the GPIO Pins for Ignition and Accessory Tx as outputs.
-    ( PM6 and PQ1, respectively) */
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTM_BASE, GPIO_PIN_6);
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTQ_BASE, GPIO_PIN_1);
-
-    /* Set them to HIGH */
-    MAP_GPIOPinWrite(GPIO_PORTM_BASE, GPIO_PIN_6, GPIO_PIN_6);
-    MAP_GPIOPinWrite(GPIO_PORTQ_BASE, GPIO_PIN_1, GPIO_PIN_1);
-
-    /* Enable the GPIO Pins for the Ignition and Accessory relays as outputs.
-    (PH0 and PK4, respectively) */
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTH_BASE, GPIO_PIN_0);
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTK_BASE, GPIO_PIN_4);
-
-    /* Then, set them to LOW */
-    MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~GPIO_PIN_0);
-    MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~GPIO_PIN_4);
-
-    /* Enable the GPIO pins for Ignition and Accessory Rx as inputs.
-    (PP3 and PH1, respectively) */
-    MAP_GPIOPinTypeGPIOInput(GPIO_PORTP_BASE, GPIO_PIN_3);
-    MAP_GPIOPinTypeGPIOInput(GPIO_PORTH_BASE, GPIO_PIN_1);
-
-    /* Then, enable the MCU's pull-down resistors on each to prevent noise */
-    GPIOP->PDR |= GPIO_PIN_3;
-    GPIOH->PDR |= GPIO_PIN_1;
-}
-
-void accPoll(void)
-{
-    /* Poll if accessory Rx is HIGH. If so, output HIGH to accessory relay.
-    Else, keep output to accessory relay LOW.
-    Return whether accessory Rx reads HIGH or LOW as bit packed byte */
-
-    // bool input = MAP_GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_1);
-
-    // Accessory switch, Rx: PH1, Relay Output: PK4
-    if (MAP_GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_1) == GPIO_PIN_1) {
-        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, GPIO_PIN_4);
-    } else {
-        MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~(GPIO_PIN_4));
-    }
-
-    // return input;
-
-}
-
-void ignitPoll(void)
-{
-    /* Poll if ignition Rx is HIGH. If so, output HIGH to ignition relay.
-    Else, keep output to ignition relay LOW.
-    Return whether ignition Rx reads HIGH or LOW as bit packed byte */
-
-
-    // bool input = MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3);
-
-    // Ignition switch, Rx: PP3, Relay Output: PH0
-    if (  MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3) == GPIO_PIN_3) {
-        MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, GPIO_PIN_0);
-    } else {
-        MAP_GPIOPinWrite(GPIO_PORTH_BASE, GPIO_PIN_0, ~(GPIO_PIN_0));
-    }
-
-    // return input;
-
-}
-
-void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count)
-{
-    //
-    // Loop while there are more characters to send.
-    //
-    while(ui32Count--)
-    {
-        //
-        // Write the next character to the UART.
-        //
-        MAP_UARTCharPutNonBlocking(UART7_BASE, *pui8Buffer++);
-    }
-}
-
-void auxADCSetup()
-{
-    /* AUX ADC SETUP - built using adc0_singleended_singlechannel_singleseq */
-
-    /* Enable the clock to GPIO Port E and wait for it to be ready */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
-    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE))) {};
-
-    /* Configure PE0 as ADC input channel */
-    MAP_GPIOPinTypeADC(GPIO_PORTE_BASE, GPIO_PIN_0);
-
-    /* Enable the clock to ADC0 and wait for it to be ready */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC0);
-    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0))) {};
-
-    /* Configure Sequencer 3 to sample a single analog channel: AIN3 */
-    MAP_ADCSequenceStepConfigure(ADC0_BASE, 3, 0, ADC_CTL_CH3 | ADC_CTL_IE | ADC_CTL_END);
-
-    /* Configure and enable sample sequence 3 with a processor signal trigger */
-    MAP_ADCSequenceConfigure(ADC0_BASE, 3, ADC_TRIGGER_PROCESSOR, 0);
-    MAP_ADCSequenceEnable(ADC0_BASE, 3);
-
-    /* Clear interrupt status flag */
-    MAP_ADCIntClear(ADC0_BASE, 3);
-}
-
-uint32_t auxADCSend(uint32_t* auxBatVoltage)
-{
-    /* AUX ADC */
-    MAP_ADCProcessorTrigger(ADC0_BASE, 3);
-    while(!MAP_ADCIntStatus(ADC0_BASE, 3, false)) {}
-    MAP_ADCIntClear(ADC0_BASE, 3);
-    MAP_ADCSequenceDataGet(ADC0_BASE, 3, auxBatVoltage);
-
-    uint8_t asciiChars[5];
-    float tempFloat = auxBatVoltage[0];
-
-    // From ((v/1000)/1.265)/.1904 - see spreadsheet
-    tempFloat *= 0.004152;
-    uint32_t temp = tempFloat * 100;
-    uint32_t toReturn = temp;
-
-    asciiChars[4] = temp % 10 + '0';
-    temp /= 10;
-    asciiChars[3] = temp % 10 + '0';
-    temp /= 10;
-    asciiChars[2] = '.';
-    asciiChars[1] = temp % 10 + '0';
-    temp /= 10;
-    asciiChars[0] = temp % 10 + '0';
-
-    UARTSend((uint8_t *)"AUX:", 4);
-    UARTSend(asciiChars, 5);
-    UARTSend((uint8_t *)"\n", 1);
-
-    return toReturn;
+    // Enable the GPIO pin for the LED (PN0).  Set the direction as output, and
+    // enable the GPIO pin for digital function.
+    GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_0);
 }
 
 void UART7Setup()
@@ -522,45 +264,74 @@ void UART7Setup()
                             UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE);
 }
 
-void CAN0_IRQHandler(void) // Uses CAN0, on J5
+void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count)
 {
-    uint32_t canStatus;
-
-    /* Read the CAN interrupt status to find the cause of the interrupt */
-    canStatus = MAP_CANIntStatus(CAN0_BASE, CAN_INT_STS_CAUSE);
-
-    /* If the cause is a controller status interrupt, then get the status */
-    if(canStatus == CAN_INT_INTID_STATUS)
+    // Loop while there are more characters to send.
+    while(ui32Count--)
     {
-        /* Read the controller status.  This will return a field of status
-         * error bits that can indicate various errors */
-        canStatus = MAP_CANStatusGet(CAN0_BASE, CAN_STS_CONTROL);
-
-        /* Set a flag to indicate some errors may have occurred */
-        errFlag = true;
+        // Write the next character to the UART.
+        //MAP_UARTCharPutNonBlocking(UART7_BASE, *pui8Buffer++);
+    	MAP_UARTCharPut(UART7_BASE, *pui8Buffer++);
     }
+}
 
-    /* Check if the cause is message object 1, which what we are using for
-     * receiving messages */
-    else if(canStatus == 1)
-    {
-        /* Getting to this point means that the RX interrupt occurred on
-         * message object 1, and the message RX is complete.  Clear the
-         * message object interrupt */
-        MAP_CANIntClear(CAN0_BASE, 1);
+void xbeeTransmit(CANTransmitData CANData, IMUTransmitData_t IMUData, uint8_t* pumpVoltage, uint8_t* auxVoltage)
+{
+	// Send CAN Data
+	UARTSend(CANData.SOC, sizeof(CANData.SOC));
+	UART_SendComma();
+	UARTSend(CANData.FPV, sizeof(CANData.FPV));
+	UART_SendComma();
+	UARTSend(CANData.highTemp, sizeof(CANData.highTemp));
+	UART_SendComma();
+	UARTSend(CANData.lowTemp, sizeof(CANData.lowTemp));
+	UART_SendComma();
+	UARTSend(CANData.highVoltage, sizeof(CANData.highVoltage));
+	UART_SendComma();
+	UARTSend(CANData.lowVoltage, sizeof(CANData.lowVoltage));
+	UART_SendComma();
 
-        /* Increment a counter to keep track of how many messages have been
-         * sent. In a real application this could be used to set flags to
-         * indicate when a message is sent */
-        msgCount++;
+	// Send Pump Voltage
+	UARTSend(pumpVoltage, sizeof(pumpVoltage));
+	UART_SendComma();
 
-        /* Set flag to indicate received message is pending */
-        rxMsg = true;
+	// Send AUX pack voltage
+	UARTSend(auxVoltage, sizeof(auxVoltage));
+	UART_SendComma();
 
-        /* Since the message was sent, clear any error flags */
-        errFlag = false;
+	// Send IMU Data
+	UARTSend(IMUData.xLat, sizeof(IMUData.xLat));
+	UART_SendComma();
+	UARTSend(IMUData.yLat, sizeof(IMUData.yLat));
+	UART_SendComma();
+	UARTSend(IMUData.zLat, sizeof(IMUData.zLat));
+	UART_SendComma();
+	UARTSend(IMUData.xGyro, sizeof(IMUData.xGyro));
+	UART_SendComma();
+	UARTSend(IMUData.yGyro, sizeof(IMUData.yGyro));
+	UART_SendComma();
+	UARTSend(IMUData.zGyro, sizeof(IMUData.zGyro));
+}
+
+void UART_SendComma()
+{
+	UARTSend(",", 1);
+}
+
+void TIMER0A_IRQHandler(void)
+{
+
+    // Clear the timer interrupt.
+    MAP_TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
+
+
+    // toggle LED every 0.25 seconds
+    if (msCount >= 250) {
+        // Toggle the flag for the first timer.
+        HWREGBITW(&g_ui32Flags, 0) ^= 1;
+        g_ui8xbeeFlag = 1;
+    	GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0, g_ui32Flags);
+    	msCount = 0;
     }
-    else
-    {
-    }
+    msCount++;
 }
