@@ -38,6 +38,7 @@
 * William Campbell
 * Ethan Brooks
 * Patrick Graybeal
+* Logan Richardson
 *
 ******************************************************************************
 *
@@ -65,6 +66,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 #include "uartstdio.h"
 
 // ID of each CAN message
@@ -89,6 +92,7 @@
 #define lowVoltageID     0x6B3
 #define lowVoltageByte   4
 #define voltageLength    5
+#define imuLength		 9
 
 #define UART_2_EN
 
@@ -110,6 +114,29 @@ typedef struct {                         // Multiplication factors (units) from 
     uint8_t lowVoltage[voltageLength];   // 0.0001 (V)
 } CANTransmitData;
 
+// IMU data struct
+typedef struct {
+	uint8_t xLat[imuLength];
+	uint8_t yLat[imuLength];
+	uint8_t zLat[imuLength];
+	uint8_t xGyro[imuLength];
+	uint8_t yGyro[imuLength];
+	uint8_t zGyro[imuLength];
+} IMUTransmitData_t;
+
+// Pump Voltage
+uint8_t pumpVoltage[voltageLength];
+
+// AUX pack voltage
+uint8_t auxVoltage[voltageLength];
+
+// Global variable to count milliseconds
+uint8_t msCount = 0;
+
+// ISR Flags
+uint8_t g_ui8xbeeFlag = 0;
+uint32_t g_ui32Flags;
+
 typedef enum states { PCB, ACC, IGN, MAX_STATES } states_t;
 // Required second count to delay switching off ACC and IGN if voltage dips below for a brief second.
 // We want to calculate the # of cycles to delay x seconds from the formula below:
@@ -121,6 +148,7 @@ typedef enum states { PCB, ACC, IGN, MAX_STATES } states_t;
 
 // Function prototypes
 void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
+void UART_SendComma();
 void auxADCSetup();
 uint32_t auxADCSend(uint32_t* auxBatVoltage);
 void UART7Setup();
@@ -136,6 +164,9 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANdata,
                 uint8_t msgDataIndex, uint8_t* msgData);
 void convertToASCII(uint8_t* chars, uint8_t digits, uint16_t num);
 void enableUARTprintf();
+void initTimers();
+void TIMER1A_IRQHandler();
+void xbeeTransmit(CANTransmitData, IMUTransmitData_t, uint8_t*, uint8_t*);
 
 int main(void)
 {
@@ -148,6 +179,7 @@ int main(void)
 
     // Set up the timer system
     timerSetup();
+    initTimers(systemClock);
 
     // Instantiate CAN objects
     static CANTransmitData CANData;
@@ -155,6 +187,9 @@ int main(void)
     uint8_t msgDataIndex;
     uint8_t msgData[8] = {0x00, 0x00, 0x00, 0x00,
                           0x00, 0x00, 0x00, 0x00};
+
+    // Instantiate IMU object
+    IMUTransmitData_t IMUData;
 
 
     uint32_t auxBatVoltage[1];
@@ -173,11 +208,33 @@ int main(void)
 
     states_t present = PCB;
 
+	strncpy((char* )CANData.SOC, "50", sizeof(CANData.SOC));
+	strncpy((char* )CANData.FPV, "300", sizeof(CANData.FPV));
+	strncpy((char* )CANData.highTemp, "80", sizeof(CANData.highTemp));
+	strncpy((char* )CANData.lowTemp, "70", sizeof(CANData.lowTemp));
+	strncpy((char* )CANData.highVoltage, "6.8", sizeof(CANData.highVoltage));
+	strncpy((char* )CANData.lowVoltage, "6.4", sizeof(CANData.lowVoltage));
+	strncpy((char* )IMUData.xLat, "1.5", sizeof(IMUData.xLat));
+	strncpy((char* )IMUData.yLat, "1.2", sizeof(IMUData.yLat));
+	strncpy((char* )IMUData.zLat, "1", sizeof(IMUData.zLat));
+	strncpy((char* )IMUData.xGyro, "20", sizeof(IMUData.xGyro));
+	strncpy((char* )IMUData.yGyro, "3", sizeof(IMUData.yGyro));
+	strncpy((char* )IMUData.zGyro, "0", sizeof(IMUData.zGyro));
+	strncpy((char* )pumpVoltage, "12", sizeof(pumpVoltage));
+	strncpy((char* )auxVoltage, "16", sizeof(auxVoltage));
+
+
     // Loop forever.
     while (1)
     {
+
+    	if (g_ui8xbeeFlag) {
+    		xbeeTransmit(CANData, IMUData, pumpVoltage, auxVoltage);
+    		g_ui8xbeeFlag = 0;
+    	}
+
         // As long as the PCB is on, CAN should be read
-        canReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
+        //canReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
         switch(present)
         {
 
@@ -317,10 +374,17 @@ void accIgnDESetup(void)
     while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOK)){};
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
     while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM)){};
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
+    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPION));
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOP);
     while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOP)){};
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOQ);
     while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOQ)){};
+
+    // Enable the GPIO pin for the LED (PN0).  Set the direction as output, and
+    // enable the GPIO pin for digital function.
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_0);
+    MAP_GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0, GPIO_PIN_0);
 
 
     /*Enable the GPIO Pins for Ignition and Accessory Tx as outputs.
@@ -508,6 +572,23 @@ void UART7Setup()
     /* Configure UART for 57,600, 8-N-1 */
     MAP_UARTConfigSetExpClk(UART7_BASE, systemClock, 57600,
                             UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE);
+}
+
+void initTimers(uint32_t sysClock)
+{
+    // Enable the peripherals used by this example.
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER1);
+
+    // Configure timer 1
+    MAP_TimerConfigure(TIMER1_BASE, TIMER_CFG_PERIODIC);
+    MAP_TimerLoadSet(TIMER1_BASE, TIMER_A, sysClock / 1000);
+
+    // Setup the interrupts for the timer timeouts.
+    MAP_IntEnable(INT_TIMER1A);
+    MAP_TimerIntEnable(TIMER1_BASE, TIMER_TIMA_TIMEOUT);
+
+    // Enable the timers.
+    MAP_TimerEnable(TIMER1_BASE, TIMER_A);
 }
 
 void timerSetup() {
@@ -755,4 +836,70 @@ void CAN0_IRQHandler(void) // Uses CAN0, on J5
     else
     {
     }
+}
+
+void xbeeTransmit(CANTransmitData CANData, IMUTransmitData_t IMUData, uint8_t* pumpVoltage, uint8_t* auxVoltage)
+{
+	// Send CAN Data
+	UARTSend(CANData.SOC, sizeof(CANData.SOC));
+	UART_SendComma();
+	UARTSend(CANData.FPV, sizeof(CANData.FPV));
+	UART_SendComma();
+	UARTSend(CANData.highTemp, sizeof(CANData.highTemp));
+	UART_SendComma();
+	UARTSend(CANData.lowTemp, sizeof(CANData.lowTemp));
+	UART_SendComma();
+	UARTSend(CANData.highVoltage, sizeof(CANData.highVoltage));
+	UART_SendComma();
+	UARTSend(CANData.lowVoltage, sizeof(CANData.lowVoltage));
+	UART_SendComma();
+
+	// Send Pump Voltage
+	UARTSend(pumpVoltage, sizeof(pumpVoltage));
+	UART_SendComma();
+
+	// Send AUX pack voltage
+	UARTSend(auxVoltage, sizeof(auxVoltage));
+	UART_SendComma();
+
+	// Send IMU Data
+	UARTSend(IMUData.xLat, sizeof(IMUData.xLat));
+	UART_SendComma();
+	UARTSend(IMUData.yLat, sizeof(IMUData.yLat));
+	UART_SendComma();
+	UARTSend(IMUData.zLat, sizeof(IMUData.zLat));
+	UART_SendComma();
+	UARTSend(IMUData.xGyro, sizeof(IMUData.xGyro));
+	UART_SendComma();
+	UARTSend(IMUData.yGyro, sizeof(IMUData.yGyro));
+	UART_SendComma();
+	UARTSend(IMUData.zGyro, sizeof(IMUData.zGyro));
+}
+
+void UART_SendComma()
+{
+	UARTSend(",", 1);
+}
+
+void TIMER1A_IRQHandler()
+{
+    // Clear the timer interrupt.
+    MAP_TimerIntClear(TIMER1_BASE, TIMER_TIMA_TIMEOUT);
+
+    // toggle LED every 0.25 seconds
+    if (msCount >= 250) {
+        // Toggle the flag for the first timer.
+        HWREGBITW(&g_ui32Flags, 1) ^= 1;
+        g_ui8xbeeFlag = 1;
+
+        if(g_ui32Flags) {
+        	MAP_GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0, GPIO_PIN_0);
+        }
+        else {
+        	MAP_GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0, ~GPIO_PIN_0);
+        }
+
+        msCount = 0;
+    }
+    msCount++;
 }
