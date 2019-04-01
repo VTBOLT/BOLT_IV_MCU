@@ -234,7 +234,8 @@ int main(void)
     	}
 
         // As long as the PCB is on, CAN should be read
-        //canReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
+        canReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
+
         switch(present)
         {
 
@@ -335,6 +336,7 @@ int main(void)
 
         /* PCB state of FSM */
         default:
+            UARTprintf("In PCB state\n");
 
             // Output LOW to ACC Relay
             MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~GPIO_PIN_4);
@@ -696,6 +698,7 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANData, uint8_t ms
     /* A new message is received */
     while (cycleMsgs <= 6)
     {
+        cycleMsgs++;
         if (rxMsg)
         {
             /* Re-use the same message object that was used earlier to configure
