@@ -95,6 +95,7 @@
 #define imuLength		 9
 
 #define UART_2_EN
+//#define XBEE_PLACEHOLDER_DATA
 
 /* Configure system clock for 120 MHz */
 uint32_t systemClock;
@@ -204,10 +205,11 @@ int main(void)
     canSetup(&sCANMessage);
 
     enableUARTprintf();
-    UARTprintf("Starting up\n");
+    //UARTprintf("Starting up\n");
 
     states_t present = PCB;
 
+#ifdef XBEE_PLACEHOLDER_DATA
 	strncpy((char* )CANData.SOC, "50", sizeof(CANData.SOC));
 	strncpy((char* )CANData.FPV, "300", sizeof(CANData.FPV));
 	strncpy((char* )CANData.highTemp, "80", sizeof(CANData.highTemp));
@@ -222,6 +224,7 @@ int main(void)
 	strncpy((char* )IMUData.zGyro, "0", sizeof(IMUData.zGyro));
 	strncpy((char* )pumpVoltage, "12", sizeof(pumpVoltage));
 	strncpy((char* )auxVoltage, "16", sizeof(auxVoltage));
+#endif
 
 
     // Loop forever.
@@ -336,7 +339,6 @@ int main(void)
 
         /* PCB state of FSM */
         default:
-            UARTprintf("In PCB state\n");
 
             // Output LOW to ACC Relay
             MAP_GPIOPinWrite(GPIO_PORTK_BASE, GPIO_PIN_4, ~GPIO_PIN_4);
@@ -487,7 +489,7 @@ void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count)
         //
         // Write the next character to the UART.
         //
-        MAP_UARTCharPutNonBlocking(UART7_BASE, *pui8Buffer++);
+        MAP_UARTCharPut(UART7_BASE, *pui8Buffer++);
     }
 }
 
@@ -539,8 +541,8 @@ uint32_t auxADCSend(uint32_t* auxBatVoltage)
     uint32_t temp = tempFloat * 100;
     uint32_t toReturn = temp;
 
-    UARTprintf("Zero: %d\n", auxBatVoltage[0]);
-    UARTprintf("AUX: %d\n", temp);
+    //UARTprintf("Zero: %d\n", auxBatVoltage[0]);
+    //UARTprintf("AUX: %d\n", temp);
 
     asciiChars[4] = temp % 10 + '0';
     temp /= 10;
