@@ -1,23 +1,23 @@
 # FIXED
 
 main.obj: ../main.c
-main.obj: C:/ti/ccs810/ccsv8/ccs_base/arm/include/msp.h
-main.obj: C:/ti/ccs810/ccsv8/ccs_base/arm/include/msp432e401y.h
-main.obj: C:/ti/ccs810/ccsv8/ccs_base/arm/include/CMSIS/core_cm4.h
-main.obj: C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/stdint.h
-main.obj: C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/sys/stdint.h
-main.obj: C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/sys/cdefs.h
-main.obj: C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/sys/_types.h
-main.obj: C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/machine/_types.h
-main.obj: C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/machine/_stdint.h
-main.obj: C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/sys/_stdint.h
-main.obj: C:/ti/ccs810/ccsv8/ccs_base/arm/include/CMSIS/cmsis_compiler.h
-main.obj: C:/ti/ccs810/ccsv8/ccs_base/arm/include/CMSIS/cmsis_ccs.h
-main.obj: C:/ti/ccs810/ccsv8/ccs_base/arm/include/system_msp432e401y.h
+main.obj: C:/ti/ccsv8/ccs_base/arm/include/msp.h
+main.obj: C:/ti/ccsv8/ccs_base/arm/include/msp432e401y.h
+main.obj: C:/ti/ccsv8/ccs_base/arm/include/CMSIS/core_cm4.h
+main.obj: C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/stdint.h
+main.obj: C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/sys/stdint.h
+main.obj: C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/sys/cdefs.h
+main.obj: C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/sys/_types.h
+main.obj: C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/machine/_types.h
+main.obj: C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/machine/_stdint.h
+main.obj: C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/sys/_stdint.h
+main.obj: C:/ti/ccsv8/ccs_base/arm/include/CMSIS/cmsis_compiler.h
+main.obj: C:/ti/ccsv8/ccs_base/arm/include/CMSIS/cmsis_ccs.h
+main.obj: C:/ti/ccsv8/ccs_base/arm/include/system_msp432e401y.h
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/driverlib.h
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/inc/msp.h
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/adc.h
-main.obj: C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/stdbool.h
+main.obj: C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/stdbool.h
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/aes.h
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/can.h
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/comp.h
@@ -32,11 +32,11 @@ main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/dr
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/fpu.h
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/gpio.h
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/hibernate.h
-main.obj: C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/time.h
-main.obj: C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/_ti_config.h
-main.obj: C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/linkage.h
-main.obj: C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/abi_prefix.h
-main.obj: C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/xlocale/_time.h
+main.obj: C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/time.h
+main.obj: C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/_ti_config.h
+main.obj: C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/linkage.h
+main.obj: C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/abi_prefix.h
+main.obj: C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/xlocale/_time.h
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/i2c.h
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/interrupt.h
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/mpu.h
@@ -57,27 +57,30 @@ main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/dr
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/udma.h
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/usb.h
 main.obj: C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/watchdog.h
-main.obj: C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/stdio.h
-main.obj: C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/stdarg.h
+main.obj: C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/stdio.h
+main.obj: C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/stdarg.h
+main.obj: C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/string.h
+main.obj: C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/stdlib.h
+main.obj: ../uartstdio.h
 
 ../main.c: 
-C:/ti/ccs810/ccsv8/ccs_base/arm/include/msp.h: 
-C:/ti/ccs810/ccsv8/ccs_base/arm/include/msp432e401y.h: 
-C:/ti/ccs810/ccsv8/ccs_base/arm/include/CMSIS/core_cm4.h: 
-C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/stdint.h: 
-C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/sys/stdint.h: 
-C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/sys/cdefs.h: 
-C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/sys/_types.h: 
-C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/machine/_types.h: 
-C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/machine/_stdint.h: 
-C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/sys/_stdint.h: 
-C:/ti/ccs810/ccsv8/ccs_base/arm/include/CMSIS/cmsis_compiler.h: 
-C:/ti/ccs810/ccsv8/ccs_base/arm/include/CMSIS/cmsis_ccs.h: 
-C:/ti/ccs810/ccsv8/ccs_base/arm/include/system_msp432e401y.h: 
+C:/ti/ccsv8/ccs_base/arm/include/msp.h: 
+C:/ti/ccsv8/ccs_base/arm/include/msp432e401y.h: 
+C:/ti/ccsv8/ccs_base/arm/include/CMSIS/core_cm4.h: 
+C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/stdint.h: 
+C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/sys/stdint.h: 
+C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/sys/cdefs.h: 
+C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/sys/_types.h: 
+C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/machine/_types.h: 
+C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/machine/_stdint.h: 
+C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/sys/_stdint.h: 
+C:/ti/ccsv8/ccs_base/arm/include/CMSIS/cmsis_compiler.h: 
+C:/ti/ccsv8/ccs_base/arm/include/CMSIS/cmsis_ccs.h: 
+C:/ti/ccsv8/ccs_base/arm/include/system_msp432e401y.h: 
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/driverlib.h: 
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/inc/msp.h: 
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/adc.h: 
-C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/stdbool.h: 
+C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/stdbool.h: 
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/aes.h: 
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/can.h: 
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/comp.h: 
@@ -92,11 +95,11 @@ C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/fl
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/fpu.h: 
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/gpio.h: 
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/hibernate.h: 
-C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/time.h: 
-C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/_ti_config.h: 
-C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/linkage.h: 
-C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/abi_prefix.h: 
-C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/xlocale/_time.h: 
+C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/time.h: 
+C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/_ti_config.h: 
+C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/linkage.h: 
+C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/abi_prefix.h: 
+C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/xlocale/_time.h: 
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/i2c.h: 
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/interrupt.h: 
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/mpu.h: 
@@ -117,5 +120,8 @@ C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/ua
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/udma.h: 
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/usb.h: 
 C:/ti/simplelink_msp432e4_sdk_2_30_00_14/source/ti/devices/msp432e4/driverlib/watchdog.h: 
-C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/stdio.h: 
-C:/ti/ccs810/ccsv8/tools/compiler/ti-cgt-arm_18.1.2.LTS/include/stdarg.h: 
+C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/stdio.h: 
+C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/stdarg.h: 
+C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/string.h: 
+C:/ti/ccsv8/tools/compiler/ti-cgt-arm_18.1.3.LTS/include/stdlib.h: 
+../uartstdio.h: 

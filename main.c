@@ -94,8 +94,10 @@
 #define voltageLength    5
 #define imuLength		 9
 
+#define IMU_RECEIVE_BAUD 56700
+
 #define UART_2_EN
-//#define XBEE_PLACEHOLDER_DATA
+#define XBEE_PLACEHOLDER_DATA
 
 /* Configure system clock for 120 MHz */
 uint32_t systemClock;
@@ -117,13 +119,24 @@ typedef struct {                         // Multiplication factors (units) from 
 
 // IMU data struct
 typedef struct {
-	uint8_t xLat[imuLength];
-	uint8_t yLat[imuLength];
-	uint8_t zLat[imuLength];
+	uint8_t xAcc[imuLength];
+	uint8_t yAcc[imuLength];
+	uint8_t zAcc[imuLength];
 	uint8_t xGyro[imuLength];
 	uint8_t yGyro[imuLength];
 	uint8_t zGyro[imuLength];
+	uint8_t pitch[imuLength];
+	uint8_t roll[imuLength];
+	uint8_t yaw[imuLength];
+	uint8_t compass[imuLength];
 } IMUTransmitData_t;
+
+// Instantiate IMU object
+IMUTransmitData_t gIMUData;
+
+// IMU receive buffer
+char gIMUReceiveBuf[13];
+uint32_t gIMUBufIndex = 0;
 
 // Pump Voltage
 uint8_t pumpVoltage[voltageLength];
@@ -149,25 +162,28 @@ typedef enum states { PCB, ACC, IGN, MAX_STATES } states_t;
 
 // Function prototypes
 void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
-void UART_SendComma();
-void auxADCSetup();
+void UART_SendComma(void);
+void auxADCSetup(void);
 uint32_t auxADCSend(uint32_t* auxBatVoltage);
-void UART7Setup();
+void UART7Setup(void);
 void accIgnDESetup(void);
-void timerSetup();
-void timerRun();
+void timerSetup(void);
+void timerRun(void);
 bool ignitPoll(void);
 bool accPoll(void);
 bool DEPoll(void);
 void canSetup(tCANMsgObject* message);
-void configureCAN();
-void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANdata,
-                uint8_t msgDataIndex, uint8_t* msgData);
+void configureCAN(void);
+void canReceive(tCANMsgObject*, CANTransmitData*, uint8_t, uint8_t*);
 void convertToASCII(uint8_t* chars, uint8_t digits, uint16_t num);
-void enableUARTprintf();
-void initTimers();
-void TIMER1A_IRQHandler();
+void enableUARTprintf(void);
+void initTimers(uint32_t);
+void TIMER1A_IRQHandler(void);
 void xbeeTransmit(CANTransmitData, IMUTransmitData_t, uint8_t*, uint8_t*);
+void imuReceive(void);
+void imuParse(void);
+void UART6_IRQHandler(void);
+void UART6Setup(void);
 
 int main(void)
 {
@@ -189,9 +205,6 @@ int main(void)
     uint8_t msgData[8] = {0x00, 0x00, 0x00, 0x00,
                           0x00, 0x00, 0x00, 0x00};
 
-    // Instantiate IMU object
-    IMUTransmitData_t IMUData;
-
 
     uint32_t auxBatVoltage[1];
     uint32_t auxBatAdjusted; //no decimal, accurate value
@@ -200,6 +213,7 @@ int main(void)
 
     auxADCSetup();
     UART7Setup();
+    UART6Setup();
     accIgnDESetup();
     configureCAN();
     canSetup(&sCANMessage);
@@ -216,12 +230,12 @@ int main(void)
 	strncpy((char* )CANData.lowTemp, "70", sizeof(CANData.lowTemp));
 	strncpy((char* )CANData.highVoltage, "6.8", sizeof(CANData.highVoltage));
 	strncpy((char* )CANData.lowVoltage, "6.4", sizeof(CANData.lowVoltage));
-	strncpy((char* )IMUData.xLat, "1.5", sizeof(IMUData.xLat));
-	strncpy((char* )IMUData.yLat, "1.2", sizeof(IMUData.yLat));
-	strncpy((char* )IMUData.zLat, "1", sizeof(IMUData.zLat));
-	strncpy((char* )IMUData.xGyro, "20", sizeof(IMUData.xGyro));
-	strncpy((char* )IMUData.yGyro, "3", sizeof(IMUData.yGyro));
-	strncpy((char* )IMUData.zGyro, "0", sizeof(IMUData.zGyro));
+	strncpy((char* )gIMUData.xAcc, "1.5", sizeof(gIMUData.xAcc));
+	strncpy((char* )gIMUData.yAcc, "1.2", sizeof(gIMUData.yAcc));
+	strncpy((char* )gIMUData.zAcc, "1", sizeof(gIMUData.zAcc));
+	strncpy((char* )gIMUData.xGyro, "20", sizeof(gIMUData.xGyro));
+	strncpy((char* )gIMUData.yGyro, "3", sizeof(gIMUData.yGyro));
+	strncpy((char* )gIMUData.zGyro, "0", sizeof(gIMUData.zGyro));
 	strncpy((char* )pumpVoltage, "12", sizeof(pumpVoltage));
 	strncpy((char* )auxVoltage, "16", sizeof(auxVoltage));
 #endif
@@ -232,7 +246,7 @@ int main(void)
     {
 
     	if (g_ui8xbeeFlag) {
-    		xbeeTransmit(CANData, IMUData, pumpVoltage, auxVoltage);
+    		xbeeTransmit(CANData, gIMUData, pumpVoltage, auxVoltage);
     		g_ui8xbeeFlag = 0;
     	}
 
@@ -389,7 +403,6 @@ void accIgnDESetup(void)
     // enable the GPIO pin for digital function.
     MAP_GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_0);
     MAP_GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0, GPIO_PIN_0);
-
 
     /*Enable the GPIO Pins for Ignition and Accessory Tx as outputs.
     ( PM6 and PQ1, respectively) */
@@ -558,6 +571,21 @@ uint32_t auxADCSend(uint32_t* auxBatVoltage)
     UARTSend((uint8_t *)"\n", 1);
 
     return toReturn;
+}
+
+void UART6Setup()
+{
+	MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART6);
+	MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOP);
+
+	GPIOPinConfigure(GPIO_PP0_U6RX);
+	GPIOPinConfigure(GPIO_PP1_U6TX);
+
+	MAP_GPIOPinTypeUART(GPIO_PORTP_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+	MAP_UARTConfigSetExpClk(UART6_BASE, systemClock, IMU_RECEIVE_BAUD, UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE);
+
+	MAP_IntEnable(INT_UART6);
+	MAP_UARTIntEnable(UART6_BASE, UART_INT_RX | UART_INT_RT);
 }
 
 void UART7Setup()
@@ -843,6 +871,62 @@ void CAN0_IRQHandler(void) // Uses CAN0, on J5
     }
 }
 
+void imuReceive(void)
+{
+	char c = MAP_UARTCharGetNonBlocking(UART6_BASE);
+
+	// Protect against buffer overflow
+	if (gIMUBufIndex >= sizeof(gIMUBufIndex)) {
+		memset(gIMUReceiveBuf, '\0', sizeof(gIMUReceiveBuf));
+		gIMUBufIndex = 0;
+	}
+
+	if (c == '|') { // If a pipe is received, then a full IMU value has been received
+		imuParse();
+	}
+	else {
+		gIMUReceiveBuf[gIMUBufIndex++] = c;
+	}
+}
+
+void imuParse(void)
+{
+	// Check the post-fix to send the new data to correct location in the IMU object
+	if (!strncmp(&gIMUReceiveBuf[9], "ax", 2)) {
+		memcpy(gIMUData.xAcc, gIMUReceiveBuf, imuLength);
+	}
+	else if (!strncmp(&gIMUReceiveBuf[9], "ay", 2)) {
+		memcpy(gIMUData.yAcc, gIMUReceiveBuf, imuLength);
+	}
+	else if (!strncmp(&gIMUReceiveBuf[9], "az", 2)) {
+		memcpy(gIMUData.zAcc, gIMUReceiveBuf, imuLength);
+	}
+	else if (!strncmp(&gIMUReceiveBuf[9], "gx", 2)) {
+		memcpy(gIMUData.xGyro, gIMUReceiveBuf, imuLength);
+	}
+	else if (!strncmp(&gIMUReceiveBuf[9], "gy", 2)) {
+		memcpy(gIMUData.yGyro, gIMUReceiveBuf, imuLength);
+	}
+	else if (!strncmp(&gIMUReceiveBuf[9], "gz", 2)) {
+		memcpy(gIMUData.zGyro, gIMUReceiveBuf, imuLength);
+	}
+	else if (!strncmp(&gIMUReceiveBuf[9], "ep", 2)) {
+		memcpy(gIMUData.pitch, gIMUReceiveBuf, imuLength);
+	}
+	else if (!strncmp(&gIMUReceiveBuf[9], "er", 2)) {
+		memcpy(gIMUData.roll, gIMUReceiveBuf, imuLength);
+	}
+	else if (!strncmp(&gIMUReceiveBuf[9], "ey", 2)) {
+		memcpy(gIMUData.yaw, gIMUReceiveBuf, imuLength);
+	}
+	else if (!strncmp(&gIMUReceiveBuf[9], "co", 2)) {
+		memcpy(gIMUData.compass, gIMUReceiveBuf, imuLength);
+	}
+
+	// Reset the IMU receive buffer with null characters
+	memset(gIMUReceiveBuf, '\0', sizeof(gIMUReceiveBuf));
+}
+
 void xbeeTransmit(CANTransmitData CANData, IMUTransmitData_t IMUData, uint8_t* pumpVoltage, uint8_t* auxVoltage)
 {
 	// Send CAN Data
@@ -868,11 +952,11 @@ void xbeeTransmit(CANTransmitData CANData, IMUTransmitData_t IMUData, uint8_t* p
 	UART_SendComma();
 
 	// Send IMU Data
-	UARTSend(IMUData.xLat, sizeof(IMUData.xLat));
+	UARTSend(IMUData.xAcc, sizeof(IMUData.xAcc));
 	UART_SendComma();
-	UARTSend(IMUData.yLat, sizeof(IMUData.yLat));
+	UARTSend(IMUData.yAcc, sizeof(IMUData.yAcc));
 	UART_SendComma();
-	UARTSend(IMUData.zLat, sizeof(IMUData.zLat));
+	UARTSend(IMUData.zAcc, sizeof(IMUData.zAcc));
 	UART_SendComma();
 	UARTSend(IMUData.xGyro, sizeof(IMUData.xGyro));
 	UART_SendComma();
@@ -907,4 +991,18 @@ void TIMER1A_IRQHandler()
         msCount = 0;
     }
     msCount++;
+}
+
+void UART6_IRQHandler(void)
+{
+	// Get the interrupt status
+	uint32_t ui32Status = MAP_UARTIntStatus(UART6_BASE, true);
+
+	// Clear the asserted interrupts
+	MAP_UARTIntClear(UART6_BASE, ui32Status);
+
+	// Loop while there are characters in the receive FIFO
+	while (MAP_UARTCharsAvail(UART6_BASE)) {
+		imuReceive();
+	}
 }
