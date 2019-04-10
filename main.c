@@ -94,7 +94,8 @@
 #define voltageLength    5
 #define imuLength		 9
 
-#define IMU_RECEIVE_BAUD 56700
+#define IMU_RECEIVE_BAUD 57600
+#define XBEE_BAUD_RATE 57600
 
 #define UART_2_EN
 #define XBEE_PLACEHOLDER_DATA
@@ -135,7 +136,7 @@ typedef struct {
 IMUTransmitData_t gIMUData;
 
 // IMU receive buffer
-char gIMUReceiveBuf[13];
+char gIMUReceiveBuf[imuLength];
 uint32_t gIMUBufIndex = 0;
 
 // Pump Voltage
@@ -161,8 +162,7 @@ typedef enum states { PCB, ACC, IGN, MAX_STATES } states_t;
 #define REQSECCOUNT 360000000
 
 // Function prototypes
-void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
-void UART_SendComma(void);
+void UARTSendStr(uint32_t, const uint8_t*, uint32_t);
 void auxADCSetup(void);
 uint32_t auxADCSend(uint32_t* auxBatVoltage);
 void UART7Setup(void);
@@ -180,10 +180,13 @@ void enableUARTprintf(void);
 void initTimers(uint32_t);
 void TIMER1A_IRQHandler(void);
 void xbeeTransmit(CANTransmitData, IMUTransmitData_t, uint8_t*, uint8_t*);
-void imuReceive(void);
-void imuParse(void);
+void imuParse(char c);
 void UART6_IRQHandler(void);
 void UART6Setup(void);
+void UART0Setup(void);
+void UARTSendStrNonBlocking(uint32_t, const uint8_t*, uint32_t);
+void UARTSendCharNonBlocking(uint32_t, const char);
+void UARTSendChar(uint32_t, const char);
 
 int main(void)
 {
@@ -191,8 +194,6 @@ int main(void)
     systemClock = MAP_SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN |
                                           SYSCTL_USE_PLL | SYSCTL_CFG_VCO_480),
                                           120000000);
-    // Enable interrupts globally
-    MAP_IntMasterEnable();
 
     // Set up the timer system
     timerSetup();
@@ -214,12 +215,16 @@ int main(void)
     auxADCSetup();
     UART7Setup();
     UART6Setup();
+    //UART0Setup();
     accIgnDESetup();
     configureCAN();
     canSetup(&sCANMessage);
 
+    // Enable interrupts globally
+    MAP_IntMasterEnable();
+
     enableUARTprintf();
-    //UARTprintf("Starting up\n");
+    UARTprintf("Starting up\n");
 
     states_t present = PCB;
 
@@ -244,7 +249,6 @@ int main(void)
     // Loop forever.
     while (1)
     {
-
     	if (g_ui8xbeeFlag) {
     		xbeeTransmit(CANData, gIMUData, pumpVoltage, auxVoltage);
     		g_ui8xbeeFlag = 0;
@@ -492,7 +496,7 @@ bool DEPoll(void)
 
 }
 
-void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count)
+void UARTSendStrNonBlocking(uint32_t UART_BASE, const uint8_t *pui8Buffer, uint32_t ui32Count)
 {
     //
     // Loop while there are more characters to send.
@@ -502,8 +506,32 @@ void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count)
         //
         // Write the next character to the UART.
         //
-        MAP_UARTCharPut(UART7_BASE, *pui8Buffer++);
+        MAP_UARTCharPutNonBlocking(UART_BASE, *pui8Buffer++);
     }
+}
+
+void UARTSendCharNonBlocking(uint32_t UART_BASE, const char c)
+{
+	MAP_UARTCharPutNonBlocking(UART_BASE, c);
+}
+
+void UARTSendStr(uint32_t UART_BASE, const uint8_t *pui8Buffer, uint32_t ui32Count)
+{
+    //
+    // Loop while there are more characters to send.
+    //
+    while(ui32Count--)
+    {
+        //
+        // Write the next character to the UART.
+        //
+        MAP_UARTCharPut(UART_BASE, *pui8Buffer++);
+    }
+}
+
+void UARTSendChar(uint32_t UART_BASE, const char c)
+{
+	MAP_UARTCharPut(UART_BASE, c);
 }
 
 void auxADCSetup()
@@ -566,44 +594,11 @@ uint32_t auxADCSend(uint32_t* auxBatVoltage)
     temp /= 10;
     asciiChars[0] = temp % 10 + '0';
 
-    UARTSend((uint8_t *)"AUX:", 4);
-    UARTSend(asciiChars, 5);
-    UARTSend((uint8_t *)"\n", 1);
+    UARTSendStr(UART7_BASE, (uint8_t *)"AUX:", 4);
+    UARTSendStr(UART7_BASE, asciiChars, 5);
+    UARTSendStr(UART7_BASE, (uint8_t *)"\n", 1);
 
     return toReturn;
-}
-
-void UART6Setup()
-{
-	MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART6);
-	MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOP);
-
-	GPIOPinConfigure(GPIO_PP0_U6RX);
-	GPIOPinConfigure(GPIO_PP1_U6TX);
-
-	MAP_GPIOPinTypeUART(GPIO_PORTP_BASE, GPIO_PIN_0 | GPIO_PIN_1);
-	MAP_UARTConfigSetExpClk(UART6_BASE, systemClock, IMU_RECEIVE_BAUD, UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE);
-
-	MAP_IntEnable(INT_UART6);
-	MAP_UARTIntEnable(UART6_BASE, UART_INT_RX | UART_INT_RT);
-}
-
-void UART7Setup()
-{
-    /* UART Transmit Setup */
-
-    /* Enable clock to peripherals used */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART7);
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
-
-    /* Set PC4 and PC5 as UART pins */
-    GPIOPinConfigure(GPIO_PC4_U7RX);
-    GPIOPinConfigure(GPIO_PC5_U7TX);
-    MAP_GPIOPinTypeUART(GPIO_PORTC_BASE, GPIO_PIN_4 | GPIO_PIN_5);
-
-    /* Configure UART for 57,600, 8-N-1 */
-    MAP_UARTConfigSetExpClk(UART7_BASE, systemClock, 57600,
-                            UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE);
 }
 
 void initTimers(uint32_t sysClock)
@@ -613,7 +608,7 @@ void initTimers(uint32_t sysClock)
 
     // Configure timer 1
     MAP_TimerConfigure(TIMER1_BASE, TIMER_CFG_PERIODIC);
-    MAP_TimerLoadSet(TIMER1_BASE, TIMER_A, sysClock / 1000);
+    MAP_TimerLoadSet(TIMER1_BASE, TIMER_A, sysClock / 2500);
 
     // Setup the interrupts for the timer timeouts.
     MAP_IntEnable(INT_TIMER1A);
@@ -746,7 +741,7 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANData, uint8_t ms
             /* Check the error flag to see if errors occurred */
             if (sCANMessage->ui32Flags & MSG_OBJ_DATA_LOST)
             {
-                  UARTprintf("\nCAN message loss detected\n");
+                  //UARTprintf("\nCAN message loss detected\n");
             }
             else
             {
@@ -757,11 +752,11 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANData, uint8_t ms
                 for (msgDataIndex = 0; msgDataIndex < sCANMessage->ui32MsgLen;
                         msgDataIndex++)
                 {
-                    UARTprintf("0x%02X ", msgData[msgDataIndex]);
+                    //UARTprintf("0x%02X ", msgData[msgDataIndex]);
                 }
 
                 /* Print the count of message sent */
-                UARTprintf(" total count = %u\n", msgCount);
+                //UARTprintf(" total count = %u\n", msgCount);
 
                 static uint8_t SOCtemp = 0;
                 static uint16_t FPVtemp = 0;
@@ -800,12 +795,12 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANData, uint8_t ms
 
                 // Print to UART console
 
-                UARTprintf("SOC: %c%c%c\n", CANData->SOC[0], CANData->SOC[1], CANData->SOC[2]);
-                UARTprintf("FPV: %c%c%c%c%c\n", CANData->FPV[0], CANData->FPV[1], CANData->FPV[2], CANData->FPV[3], CANData->FPV[4]);
-                UARTprintf("highTemp: %c%c%c%c%c\n", CANData->highTemp[0], CANData->highTemp[1], CANData->highTemp[2], CANData->highTemp[3], CANData->highTemp[4]);
-                UARTprintf("lowTemp: %c%c%c%c%c\n", CANData->lowTemp[0], CANData->lowTemp[1], CANData->lowTemp[2], CANData->lowTemp[3], CANData->lowTemp[4]);
-                UARTprintf("highVoltage: %c%c%c%c%c\n", CANData->highVoltage[0], CANData->highVoltage[1], CANData->highVoltage[2], CANData->highVoltage[3], CANData->highVoltage[4]);
-                UARTprintf("lowVoltage: %c%c%c%c%c\n", CANData->lowVoltage[0], CANData->lowVoltage[1], CANData->lowVoltage[2], CANData->lowVoltage[3], CANData->lowVoltage[4]);
+                //UARTprintf("SOC: %c%c%c\n", CANData->SOC[0], CANData->SOC[1], CANData->SOC[2]);
+                //UARTprintf("FPV: %c%c%c%c%c\n", CANData->FPV[0], CANData->FPV[1], CANData->FPV[2], CANData->FPV[3], CANData->FPV[4]);
+                //UARTprintf("highTemp: %c%c%c%c%c\n", CANData->highTemp[0], CANData->highTemp[1], CANData->highTemp[2], CANData->highTemp[3], CANData->highTemp[4]);
+                //UARTprintf("lowTemp: %c%c%c%c%c\n", CANData->lowTemp[0], CANData->lowTemp[1], CANData->lowTemp[2], CANData->lowTemp[3], CANData->lowTemp[4]);
+                //UARTprintf("highVoltage: %c%c%c%c%c\n", CANData->highVoltage[0], CANData->highVoltage[1], CANData->highVoltage[2], CANData->highVoltage[3], CANData->highVoltage[4]);
+                //UARTprintf("lowVoltage: %c%c%c%c%c\n", CANData->lowVoltage[0], CANData->lowVoltage[1], CANData->lowVoltage[2], CANData->lowVoltage[3], CANData->lowVoltage[4]);
 
             }
         }
@@ -813,7 +808,7 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData* CANData, uint8_t ms
         {
             if(errFlag)
             {
-                UARTprintf("Error: Problem while receiving CAN interrupt");
+                //UARTprintf("Error: Problem while receiving CAN interrupt");
             }
         }
     }
@@ -871,103 +866,185 @@ void CAN0_IRQHandler(void) // Uses CAN0, on J5
     }
 }
 
-void imuReceive(void)
+void imuParse(char c)
 {
-	char c = MAP_UARTCharGetNonBlocking(UART6_BASE);
+#define DEFAULT 0
+	enum {
+		ACCEL = 'a',
+		GYRO = 'g',
+		EULER = 'e',
+		ACCEL_X = 'a' + 'x',
+		ACCEL_Y = 'a' + 'y',
+		ACCEL_Z = 'a' + 'z',
+		GYRO_X = 'g' + 'x',
+		GYRO_Y = 'g' + 'y',
+		GYRO_Z = 'g' + 'z',
+		EULER_R = 'e' + 'r',
+		EULER_Y = 'e' + 'y',
+		EULER_P = 'e' + 'p',
+		COMPASS = 'c'
+	};
+	static int state = DEFAULT; // initial state will be default state
 
-	// Protect against buffer overflow
-	if (gIMUBufIndex >= sizeof(gIMUBufIndex)) {
+	switch (state)
+	{
+	case ACCEL:
+		state = 'a' + c;
+		break;
+
+	case ACCEL_X:
+		memcpy(gIMUData.xAcc, gIMUReceiveBuf, imuLength);
 		memset(gIMUReceiveBuf, '\0', sizeof(gIMUReceiveBuf));
 		gIMUBufIndex = 0;
-	}
+		UARTprintf(" -- Accel-X\n\r");
+		state = DEFAULT;
+		break;
 
-	if (c == '|') { // If a pipe is received, then a full IMU value has been received
-		imuParse();
-	}
-	else {
-		gIMUReceiveBuf[gIMUBufIndex++] = c;
-	}
-}
-
-void imuParse(void)
-{
-	// Check the post-fix to send the new data to correct location in the IMU object
-	if (!strncmp(&gIMUReceiveBuf[9], "ax", 2)) {
-		memcpy(gIMUData.xAcc, gIMUReceiveBuf, imuLength);
-	}
-	else if (!strncmp(&gIMUReceiveBuf[9], "ay", 2)) {
+	case ACCEL_Y:
 		memcpy(gIMUData.yAcc, gIMUReceiveBuf, imuLength);
-	}
-	else if (!strncmp(&gIMUReceiveBuf[9], "az", 2)) {
-		memcpy(gIMUData.zAcc, gIMUReceiveBuf, imuLength);
-	}
-	else if (!strncmp(&gIMUReceiveBuf[9], "gx", 2)) {
-		memcpy(gIMUData.xGyro, gIMUReceiveBuf, imuLength);
-	}
-	else if (!strncmp(&gIMUReceiveBuf[9], "gy", 2)) {
-		memcpy(gIMUData.yGyro, gIMUReceiveBuf, imuLength);
-	}
-	else if (!strncmp(&gIMUReceiveBuf[9], "gz", 2)) {
-		memcpy(gIMUData.zGyro, gIMUReceiveBuf, imuLength);
-	}
-	else if (!strncmp(&gIMUReceiveBuf[9], "ep", 2)) {
-		memcpy(gIMUData.pitch, gIMUReceiveBuf, imuLength);
-	}
-	else if (!strncmp(&gIMUReceiveBuf[9], "er", 2)) {
-		memcpy(gIMUData.roll, gIMUReceiveBuf, imuLength);
-	}
-	else if (!strncmp(&gIMUReceiveBuf[9], "ey", 2)) {
-		memcpy(gIMUData.yaw, gIMUReceiveBuf, imuLength);
-	}
-	else if (!strncmp(&gIMUReceiveBuf[9], "co", 2)) {
-		memcpy(gIMUData.compass, gIMUReceiveBuf, imuLength);
-	}
+		memset(gIMUReceiveBuf, '\0', sizeof(gIMUReceiveBuf));
+		gIMUBufIndex = 0;
+		UARTprintf(" -- Accel-Y\n\r");
+		state = DEFAULT;
+		break;
 
-	// Reset the IMU receive buffer with null characters
-	memset(gIMUReceiveBuf, '\0', sizeof(gIMUReceiveBuf));
+	case ACCEL_Z:
+		memcpy(gIMUData.zAcc, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '\0', sizeof(gIMUReceiveBuf));
+		gIMUBufIndex = 0;
+		UARTprintf(" -- Accel-Z\n\r");
+		state = DEFAULT;
+		break;
+
+	case GYRO:
+		state = 'g' + c;
+		break;
+
+	case GYRO_X:
+		memcpy(gIMUData.xGyro, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '\0', sizeof(gIMUReceiveBuf));
+		gIMUBufIndex = 0;
+		UARTprintf(" -- Gyro-X\n\r");
+		state = DEFAULT;
+		break;
+
+	case GYRO_Y:
+		memcpy(gIMUData.yGyro, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '\0', sizeof(gIMUReceiveBuf));
+		gIMUBufIndex = 0;
+		UARTprintf(" -- Gyro-Y\n\r");
+		state = DEFAULT;
+		break;
+
+	case GYRO_Z:
+		memcpy(gIMUData.zGyro, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '\0', sizeof(gIMUReceiveBuf));
+		gIMUBufIndex = 0;
+		UARTprintf(" -- Gyro-Z\n\r");
+		state = DEFAULT;
+		break;
+
+	case EULER:
+		state = 'e' + c;
+		break;
+
+	case EULER_R:
+		memcpy(gIMUData.roll, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '\0', sizeof(gIMUReceiveBuf));
+		gIMUBufIndex = 0;
+		UARTprintf(" -- Roll\n\r");
+		state = DEFAULT;
+		break;
+
+	case EULER_Y:
+		memcpy(gIMUData.yaw, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '\0', sizeof(gIMUReceiveBuf));
+		gIMUBufIndex = 0;
+		UARTprintf(" -- Yaw\n\r");
+		state = DEFAULT;
+		break;
+
+	case EULER_P:
+		memcpy(gIMUData.pitch, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '\0', sizeof(gIMUReceiveBuf));
+		gIMUBufIndex = 0;
+		UARTprintf(" -- Pitch\n\r");
+		state = DEFAULT;
+		break;
+
+	case COMPASS:
+		memcpy(gIMUData.compass, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '\0', sizeof(gIMUReceiveBuf));
+		gIMUBufIndex = 0;
+		UARTprintf(" -- Compass\n\r");
+		state = DEFAULT;
+		break;
+
+	default:
+		if ((c >= 0x30 && c < 0x39) || c == '.' || c == '-') { // Check if the character is an ASCII number
+			// Protect against buffer overflow
+			if (gIMUBufIndex >= sizeof(gIMUReceiveBuf)) {
+				memset(gIMUReceiveBuf, '\0', sizeof(gIMUReceiveBuf));
+				UARTprintf("Buffer overflow detected\n\r");
+				gIMUBufIndex = 0;
+			}
+			else {
+				gIMUReceiveBuf[gIMUBufIndex++] = c;
+				UARTprintf("%c", c);
+			}
+		}
+		else {
+			state = c;
+		}
+		break;
+	}
 }
 
 void xbeeTransmit(CANTransmitData CANData, IMUTransmitData_t IMUData, uint8_t* pumpVoltage, uint8_t* auxVoltage)
 {
 	// Send CAN Data
-	UARTSend(CANData.SOC, sizeof(CANData.SOC));
-	UART_SendComma();
-	UARTSend(CANData.FPV, sizeof(CANData.FPV));
-	UART_SendComma();
-	UARTSend(CANData.highTemp, sizeof(CANData.highTemp));
-	UART_SendComma();
-	UARTSend(CANData.lowTemp, sizeof(CANData.lowTemp));
-	UART_SendComma();
-	UARTSend(CANData.highVoltage, sizeof(CANData.highVoltage));
-	UART_SendComma();
-	UARTSend(CANData.lowVoltage, sizeof(CANData.lowVoltage));
-	UART_SendComma();
+	UARTSendStr(UART7_BASE, CANData.SOC, sizeof(CANData.SOC));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, CANData.FPV, sizeof(CANData.FPV));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, CANData.highTemp, sizeof(CANData.highTemp));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, CANData.lowTemp, sizeof(CANData.lowTemp));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, CANData.highVoltage, sizeof(CANData.highVoltage));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, CANData.lowVoltage, sizeof(CANData.lowVoltage));
+	UARTSendChar(UART7_BASE, ',');
 
 	// Send Pump Voltage
-	UARTSend(pumpVoltage, sizeof(pumpVoltage));
-	UART_SendComma();
+	UARTSendStr(UART7_BASE, pumpVoltage, sizeof(pumpVoltage));
+	UARTSendChar(UART7_BASE, ',');
 
 	// Send AUX pack voltage
-	UARTSend(auxVoltage, sizeof(auxVoltage));
-	UART_SendComma();
+	UARTSendStr(UART7_BASE, auxVoltage, sizeof(auxVoltage));
+	UARTSendChar(UART7_BASE, ',');
 
 	// Send IMU Data
-	UARTSend(IMUData.xAcc, sizeof(IMUData.xAcc));
-	UART_SendComma();
-	UARTSend(IMUData.yAcc, sizeof(IMUData.yAcc));
-	UART_SendComma();
-	UARTSend(IMUData.zAcc, sizeof(IMUData.zAcc));
-	UART_SendComma();
-	UARTSend(IMUData.xGyro, sizeof(IMUData.xGyro));
-	UART_SendComma();
-	UARTSend(IMUData.yGyro, sizeof(IMUData.yGyro));
-	UART_SendComma();
-	UARTSend(IMUData.zGyro, sizeof(IMUData.zGyro));
-}
-
-void UART_SendComma()
-{
-	UARTSend(",", 1);
+	UARTSendStr(UART7_BASE, IMUData.xAcc, sizeof(IMUData.xAcc));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, IMUData.yAcc, sizeof(IMUData.yAcc));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, IMUData.zAcc, sizeof(IMUData.zAcc));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, IMUData.xGyro, sizeof(IMUData.xGyro));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, IMUData.yGyro, sizeof(IMUData.yGyro));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, IMUData.zGyro, sizeof(IMUData.zGyro));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, IMUData.roll, sizeof(IMUData.roll));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, IMUData.pitch, sizeof(IMUData.pitch));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, IMUData.yaw, sizeof(IMUData.yaw));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, IMUData.compass, sizeof(IMUData.compass));
+	UARTSendStr(UART7_BASE, "\n\r", 2);
 }
 
 void TIMER1A_IRQHandler()
@@ -993,16 +1070,90 @@ void TIMER1A_IRQHandler()
     msCount++;
 }
 
+void UART7Setup()
+{
+    /* UART Transmit Setup */
+
+    /* Enable clock to peripherals used */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART7);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
+
+    /* Set PC4 and PC5 as UART pins */
+    GPIOPinConfigure(GPIO_PC4_U7RX);
+    GPIOPinConfigure(GPIO_PC5_U7TX);
+    MAP_GPIOPinTypeUART(GPIO_PORTC_BASE, GPIO_PIN_4 | GPIO_PIN_5);
+
+    /* Configure UART for 57,600, 8-N-1 */
+    MAP_UARTConfigSetExpClk(UART7_BASE, systemClock, XBEE_BAUD_RATE,
+                            UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE);
+
+	//MAP_IntEnable(INT_UART7);
+	//MAP_UARTIntEnable(UART7_BASE, UART_INT_RX | UART_INT_RT);
+}
+
+void UART6Setup(void)
+{
+    /* UART Transmit Setup */
+
+    /* Enable clock to peripherals used */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART6);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOP);
+
+    /* Set PP0 and PP1 as UART pins */
+    GPIOPinConfigure(GPIO_PP0_U6RX);
+    GPIOPinConfigure(GPIO_PP1_U6TX);
+    MAP_GPIOPinTypeUART(GPIO_PORTP_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+
+    /* Configure UART for 57,600, 8-N-1 */
+    MAP_UARTConfigSetExpClk(UART6_BASE, systemClock, IMU_RECEIVE_BAUD,
+                            UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE);
+
+	MAP_IntEnable(INT_UART6);
+	MAP_UARTIntEnable(UART6_BASE, UART_INT_RX | UART_INT_RT);
+}
+
+void UART0Setup(void)
+{
+    /* UART Transmit Setup */
+
+    /* Enable clock to peripherals used */
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+
+    /* Set PP0 and PP1 as UART pins */
+    GPIOPinConfigure(GPIO_PA0_U0RX);
+    GPIOPinConfigure(GPIO_PA1_U0TX);
+    MAP_GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_1 | GPIO_PIN_0);
+
+    /* Configure UART for 57,600, 8-N-1 */
+    MAP_UARTConfigSetExpClk(UART0_BASE, systemClock, IMU_RECEIVE_BAUD,
+                            UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE);
+
+	//MAP_IntEnable(INT_UART6);
+	//MAP_UARTIntEnable(UART6_BASE, UART_INT_RX | UART_INT_RT);
+}
+
 void UART6_IRQHandler(void)
 {
-	// Get the interrupt status
-	uint32_t ui32Status = MAP_UARTIntStatus(UART6_BASE, true);
+    uint32_t ui32Status;
 
-	// Clear the asserted interrupts
-	MAP_UARTIntClear(UART6_BASE, ui32Status);
+    //
+    // Get the interrrupt status.
+    //
+    ui32Status = MAP_UARTIntStatus(UART6_BASE, true);
 
-	// Loop while there are characters in the receive FIFO
-	while (MAP_UARTCharsAvail(UART6_BASE)) {
-		imuReceive();
-	}
+    //
+    // Clear the asserted interrupts.
+    //
+    MAP_UARTIntClear(UART6_BASE, ui32Status);
+
+    //
+    // Loop while there are characters in the receive FIFO.
+    //
+    while(MAP_UARTCharsAvail(UART6_BASE))
+    {
+    	char c = MAP_UARTCharGetNonBlocking(UART6_BASE);
+    	//MAP_UARTCharPutNonBlocking(UART0_BASE, c);
+    	imuParse(c);
+    }
 }
