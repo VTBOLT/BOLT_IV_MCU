@@ -251,6 +251,7 @@ int main(void)
             // Aux battery voltage stored as volts * 1000
             auxBatAdjusted = auxADCSend(auxBatVoltage);
 
+            UARTprintf("Aux Bat: %i", auxBatAdjusted);
             UARTprintf("Pump: %i", pumpADCSend(pumpVoltage));
 
             if (auxBatAdjusted <= 1200) {
@@ -541,17 +542,22 @@ uint32_t auxADCSend(uint32_t* auxBatVoltage)
     uint32_t temp = tempFloat * 100;
     uint32_t toReturn = temp;
 
-    //UARTprintf("Zero: %d\n", auxBatVoltage[0]);
-    //UARTprintf("AUX: %d\n", temp);
+    UARTprintf("Zero: %d\n", auxBatVoltage[0]);
+    UARTprintf("AUX: %d\n", temp);
 
-    asciiChars[4] = temp % 10 + '0';
-    temp /= 10;
-    asciiChars[3] = temp % 10 + '0';
-    temp /= 10;
+    uint32_t tempToTransmit = auxBatVoltage[0] * .461;
+    UARTprintf("Aux bat to transmit: %i\n", tempToTransmit);
+
+    asciiChars[4] = tempToTransmit % 10 + '0';
+    tempToTransmit /= 10;
+    asciiChars[3] = tempToTransmit % 10 + '0';
+    tempToTransmit /= 10;
     asciiChars[2] = '.';
-    asciiChars[1] = temp % 10 + '0';
-    temp /= 10;
-    asciiChars[0] = temp % 10 + '0';
+    asciiChars[1] = tempToTransmit % 10 + '0';
+    tempToTransmit /= 10;
+    asciiChars[0] = tempToTransmit % 10 + '0';
+
+    UARTprintf("Put into chars: %c%c%c%c%c", asciiChars[0], asciiChars[1], asciiChars[2], asciiChars[3], asciiChars[4]);
 
     uint8_t i = 0;
     for ( ; i < 5; i++) {
@@ -737,7 +743,7 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData, uint8_t 
             rxMsg = false;
 
             /* Print a message to the console showing the message count and the
-             * contents of the received message */
+             * contents of the received message
             UARTprintf("Message length: %i \n", sCANMessage->ui32MsgLen);
             UARTprintf("Received msg 0x%03X: ",sCANMessage->ui32MsgID);
             for (msgDataIndex = 0; msgDataIndex < sCANMessage->ui32MsgLen;
@@ -746,13 +752,13 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData, uint8_t 
                 UARTprintf("0x%02X ", msgData[msgDataIndex]);
             }
 
-            /* Print the count of message sent */
-            UARTprintf(" total count = %u\n", msgCount);
+            /* Print the count of message sent
+            UARTprintf(" total count = %u\n", msgCount);*/
 
             static uint8_t SOCtemp = 20;
             static uint16_t FPVtemp = 21;
-            static uint16_t highTempTemp = 22;
-            static uint16_t lowTempTemp = 23;
+            static uint16_t highTempTemp = 10;
+            static uint16_t lowTempTemp = 10;
             static uint16_t highVoltTemp = 24;
             static uint16_t lowVoltTemp = 25;
             static int16_t rpmTemp = 26;
@@ -899,8 +905,8 @@ void xbeeTransmit(CANTransmitData_t CANData, IMUTransmitData_t IMUData, uint8_t*
 	UART_SendComma();
 
 	// Send Pump Voltage
-	UARTSend(pumpVoltage, sizeof(pumpVoltage));
-	UART_SendComma();
+	//UARTSend(pumpVoltage, sizeof(pumpVoltage));
+	//UART_SendComma();
 
 	// Send AUX pack voltage
 	UARTSend(auxVoltage, sizeof(auxVoltage));
