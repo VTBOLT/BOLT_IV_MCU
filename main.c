@@ -119,7 +119,14 @@ uint32_t g_ui32Flags;
 uint8_t CANCount = 0;
 uint8_t g_ui8canFlag = 0;
 
+// Timer 1 flag
+uint8_t intTimer1_flag = 0;
+
+// Debounce counter
+uint32_t debounceCounter = 0;
+
 typedef enum states { PCB, ACC, IGN, MAX_STATES } states_t;
+typedef enum ignitState { IGNIT_OFF = 0, IGNIT_ON = 1 } ignitState_t;
 // Required second count to delay switching off ACC and IGN if voltage dips below for a brief second.
 // We want to calculate the # of cycles to delay x seconds from the formula below:
 // x seconds delay = (# of Cycles) * (1/frequency)
@@ -138,6 +145,7 @@ void UART7Setup();
 void accIgnDESetup(void);
 void timerSetup();
 void timerRun();
+bool ignitDebounce(bool, uint32_t*, uint8_t*);
 bool ignitPoll(void);
 bool accPoll(void);
 bool DEPoll(void);
@@ -443,17 +451,76 @@ bool accPoll(void)
 
 }
 
+bool ignitDebounce(bool btn, uint32_t* count, uint8_t* flag)
+{
+//	bool btnAsserted = true;
+//
+//	if (btn) { // ignition is asserted
+//		*count = 0;
+//		return btnAsserted;
+//	}
+//	else { // ignition is de-asserted
+//		if (*flag) {
+//			*flag = 0;
+//			if (*count > 199) { // If ignition has been off for more than 200 ms, then ignition is definitely off
+//				btnAsserted = false;
+//			}
+//			else {
+//				(*count)++;
+//				btnAsserted = true; // If ignition has been off for less than 200 ms, then ignition might still be on
+//			}
+//		}
+//	}
+//	return btnAsserted;
+
+	static ignitState_t ignitState = IGNIT_OFF;
+
+	switch (ignitState)
+	{
+	case IGNIT_OFF:
+		if (btn == true) {
+			*count = 0;
+			ignitState = IGNIT_ON;
+		}
+		break;
+
+	case IGNIT_ON:
+		if (btn == false) {
+			if (*flag) {
+				*flag = 0;
+				if (*count > 30) {
+					*count = 0;
+					ignitState = IGNIT_OFF;
+				}
+				else {
+					(*count)++;
+				}
+			}
+		}
+		break;
+	}
+	return ignitState;
+}
+
 bool ignitPoll(void)
 {
     /* Return TRUE if ignition Rx reads HIGH and FALSE if ignition Rx reads LOW
        As a note: IGN Rx: PP3, IGN Relay: PH0 */
 
-    if (  MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3) == GPIO_PIN_3) {
-        return true;
-    } else {
-        return false;
-    }
-
+//    if (  MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3) == GPIO_PIN_3) {
+//        return true;
+//    } else {
+//        return false;
+//    }
+	//return ignitDebounce(MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3 == GPIO_PIN_3), &debounceCounter, &intTimer1_flag);
+	bool ignit = false;
+	if (  MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3) == GPIO_PIN_3) {
+		ignit = ignitDebounce(true, &debounceCounter, &intTimer1_flag);
+	}
+	else {
+		ignit = ignitDebounce(false, &debounceCounter, &intTimer1_flag);
+	}
+	return ignit;
 }
 
 bool DEPoll(void)
@@ -947,6 +1014,7 @@ void UART_SendComma()
 void TIMER1A_IRQHandler()
 {
     // Clear the timer interrupt.
+	intTimer1_flag = 1;
     MAP_TimerIntClear(TIMER1_BASE, TIMER_TIMA_TIMEOUT);
 
     // toggle LED every 0.05 seconds
