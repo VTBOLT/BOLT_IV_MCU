@@ -223,7 +223,8 @@ int main(void)
     	if (g_ui8canFlag) {
     	    canReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
     	    g_ui8canFlag = 0;
-            UARTprintf("Pump: %i", pumpADCSend(pumpVoltage));
+    	    UARTprintf("Compare value: %i\n", auxADCSend(auxBatVoltage));
+            //UARTprintf("Pump: %i", pumpADCSend(pumpVoltage));
     	}
 
         switch(present)
@@ -534,19 +535,31 @@ uint32_t auxADCSend(uint32_t* auxBatVoltage)
     MAP_ADCIntClear(ADC0_BASE, 3);
     MAP_ADCSequenceDataGet(ADC0_BASE, 3, auxBatVoltage);
 
-    uint8_t asciiChars[5];
     float tempFloat = auxBatVoltage[0];
 
     // From ((v/1000)/1.265)/.1904 - see spreadsheet
-    tempFloat *= 0.004719;
-    uint32_t temp = tempFloat * 100;
-    uint32_t toReturn = temp;
+    //tempFloat *= 0.004719;
+    //tempFloat *= 0.004104;
+    //uint32_t temp = tempFloat * 100;
+    //uint32_t toReturn = temp;
 
-    UARTprintf("Zero: %d\n", auxBatVoltage[0]);
-    UARTprintf("AUX: %d\n", temp);
+    uint32_t tempTrueVoltage = (tempFloat / 218.587) * 100; // see spreadsheet
+    uint32_t compareVoltage = tempTrueVoltage;
 
+    UARTprintf("Raw Value: %i\n", auxBatVoltage[0]);
+    UARTprintf("Adjusted Value: %i\n", tempTrueVoltage);
+
+    convertToASCII(auxVoltage, voltageLength-1, tempTrueVoltage);
+
+    // Adjust for decimal point in the middle to transmit
+    auxVoltage[4] = auxVoltage[3];
+    auxVoltage[3] = auxVoltage[2];
+    auxVoltage[2] = '.';
+
+    /*
     uint32_t tempToTransmit = auxBatVoltage[0] * .461;
     UARTprintf("Aux bat to transmit: %i\n", tempToTransmit);
+
 
     asciiChars[4] = tempToTransmit % 10 + '0';
     tempToTransmit /= 10;
@@ -556,18 +569,18 @@ uint32_t auxADCSend(uint32_t* auxBatVoltage)
     asciiChars[1] = tempToTransmit % 10 + '0';
     tempToTransmit /= 10;
     asciiChars[0] = tempToTransmit % 10 + '0';
+    */
 
-    UARTprintf("Put into chars: %c%c%c%c%c", asciiChars[0], asciiChars[1], asciiChars[2], asciiChars[3], asciiChars[4]);
+    UARTprintf("Put into chars: %c%c%c%c%c\n", auxVoltage[0], auxVoltage[1], auxVoltage[2], auxVoltage[3], auxVoltage[4]);
 
+    /*
     uint8_t i = 0;
     for ( ; i < 5; i++) {
         auxVoltage[i] = asciiChars[i];
     }
-    //UARTSend((uint8_t *)"AUX:", 4);
-    //UARTSend(asciiChars, 5);
-    //UARTSend((uint8_t *)"\n", 1);
+    */
 
-    return toReturn;
+    return compareVoltage;
 }
 
 uint32_t pumpADCSend(uint32_t* pumpVoltage)
@@ -739,7 +752,7 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData, uint8_t 
 
             // Set rxMsg to false since data has been put into the object
             // The next message will stay in the buffer until CANMessageGet() is called again
-            // The interrupt function sets rxMsg to true to satisfy the if statement
+            //The interrupt functi.on sets rxMsg to true to satisfy the if statement
             rxMsg = false;
 
             /* Print a message to the console showing the message count and the
@@ -800,7 +813,7 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData, uint8_t 
             convertToASCII(CANData->RPM, RPM_LEN, rpmTemp);
 
             // Print to UART console
-
+/*
             UARTprintf("SOC: %c%c%c\n", CANData->SOC[0], CANData->SOC[1], CANData->SOC[2]);
             UARTprintf("FPV: %c%c%c%c%c\n", CANData->FPV[0], CANData->FPV[1], CANData->FPV[2], CANData->FPV[3], CANData->FPV[4]);
             UARTprintf("highTemp: %c%c%c%c%c\n", CANData->highTemp[0], CANData->highTemp[1], CANData->highTemp[2], CANData->highTemp[3], CANData->highTemp[4]);
@@ -808,7 +821,7 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData, uint8_t 
             UARTprintf("highVoltage: %c%c%c%c%c\n", CANData->highVoltage[0], CANData->highVoltage[1], CANData->highVoltage[2], CANData->highVoltage[3], CANData->highVoltage[4]);
             UARTprintf("lowVoltage: %c%c%c%c%c\n", CANData->lowVoltage[0], CANData->lowVoltage[1], CANData->lowVoltage[2], CANData->lowVoltage[3], CANData->lowVoltage[4]);
             UARTprintf("RPM: %c%c%c%c%c%c\n", CANData->RPM[0], CANData->RPM[1], CANData->RPM[2], CANData->RPM[3], CANData->RPM[4], CANData->RPM[5]);
-        }
+*/        }
 
         else
         {
