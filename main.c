@@ -72,6 +72,8 @@
 #define UART_2_EN
 #define XBEE_PLACEHOLDER_DATA
 
+#define IGNIT_CUTOFF_DELAY	70
+
 /* Configure system clock for 120 MHz */
 uint32_t systemClock;
 
@@ -453,42 +455,30 @@ bool accPoll(void)
 
 bool ignitDebounce(bool btn, uint32_t* count, uint8_t* flag)
 {
-//	bool btnAsserted = true;
-//
-//	if (btn) { // ignition is asserted
-//		*count = 0;
-//		return btnAsserted;
-//	}
-//	else { // ignition is de-asserted
-//		if (*flag) {
-//			*flag = 0;
-//			if (*count > 199) { // If ignition has been off for more than 200 ms, then ignition is definitely off
-//				btnAsserted = false;
-//			}
-//			else {
-//				(*count)++;
-//				btnAsserted = true; // If ignition has been off for less than 200 ms, then ignition might still be on
-//			}
-//		}
-//	}
-//	return btnAsserted;
-
 	static ignitState_t ignitState = IGNIT_OFF;
+	static uint32_t bounceCount = 0; // count number of ms that ignition switch has bounced
+	static bool bounceFlag = false;
 
 	switch (ignitState)
 	{
 	case IGNIT_OFF:
+		//*count = 0;
 		if (btn == true) {
-			*count = 0;
 			ignitState = IGNIT_ON;
+		}
+		// count number of times the ignition switch is bouncing
+		if (bounceFlag) {
+			bounceCount++;
+			bounceFlag = false;
 		}
 		break;
 
 	case IGNIT_ON:
-		if (btn == false) {
-			if (*flag) {
-				*flag = 0;
-				if (*count > 30) {
+		if (*flag) {
+			*flag = 0;
+			if (btn == false) {
+				bounceFlag = true;
+				if (*count > IGNIT_CUTOFF_DELAY) {
 					*count = 0;
 					ignitState = IGNIT_OFF;
 				}
@@ -496,9 +486,13 @@ bool ignitDebounce(bool btn, uint32_t* count, uint8_t* flag)
 					(*count)++;
 				}
 			}
+			else {
+				*count = 0; // reset counter if ignition switch turns back on
+			}
 		}
 		break;
 	}
+	//UARTprintf("%d\n", *count);
 	return ignitState;
 }
 
@@ -512,15 +506,7 @@ bool ignitPoll(void)
 //    } else {
 //        return false;
 //    }
-	//return ignitDebounce(MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3 == GPIO_PIN_3), &debounceCounter, &intTimer1_flag);
-	bool ignit = false;
-	if (  MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3) == GPIO_PIN_3) {
-		ignit = ignitDebounce(true, &debounceCounter, &intTimer1_flag);
-	}
-	else {
-		ignit = ignitDebounce(false, &debounceCounter, &intTimer1_flag);
-	}
-	return ignit;
+	return ignitDebounce((bool)(MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3)), &debounceCounter, &intTimer1_flag);
 }
 
 bool DEPoll(void)
