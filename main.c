@@ -70,7 +70,7 @@
 #define RPM_LEN          6 //due to possible negative, will have leading 0 if positive
 
 #define UART_2_EN
-#define XBEE_PLACEHOLDER_DATA
+//#define XBEE_PLACEHOLDER_DATA
 
 #define IGNIT_CUTOFF_DELAY	70
 #define IMU_RECEIVE_BAUD 57600
@@ -98,15 +98,16 @@ typedef struct {                         // Multiplication factors (units) from 
 
 // IMU data struct
 typedef struct {
-	uint8_t xLat[imuLength];
-	uint8_t yLat[imuLength];
-	uint8_t zLat[imuLength];
+	uint8_t xAcc[imuLength];
+	uint8_t yAcc[imuLength];
+	uint8_t zAcc[imuLength];
 	uint8_t xGyro[imuLength];
 	uint8_t yGyro[imuLength];
 	uint8_t zGyro[imuLength];
 	uint8_t pitch[imuLength];
 	uint8_t roll[imuLength];
 	uint8_t yaw[imuLength];
+	uint8_t compass[imuLength];
 } IMUTransmitData_t;
 
 // Instantiate IMU object
@@ -179,6 +180,7 @@ void initTimers();
 void TIMER1A_IRQHandler();
 void UART6_IRQHandler(void);
 void xbeeTransmit(CANTransmitData_t, IMUTransmitData_t, uint8_t*, uint8_t*);
+void imuParse(char c);
 
 int main(void)
 {
@@ -200,6 +202,7 @@ int main(void)
     // Instantiate IMU object
     IMUTransmitData_t IMUData;
 
+    memset(auxVoltage, '0', sizeof(auxVoltage));
     uint32_t auxBatVoltage[1];
     uint32_t auxBatAdjusted; //no decimal, accurate value
 
@@ -216,7 +219,7 @@ int main(void)
     MAP_IntMasterEnable();
 
     enableUARTprintf();
-    UARTprintf("UARTprintf enabled\n");
+    //UARTprintf("UARTprintf enabled\n");
 
     states_t present = PCB;
 
@@ -227,9 +230,9 @@ int main(void)
 	strncpy((char* )CANData.lowTemp, "70", sizeof(CANData.lowTemp));
 	strncpy((char* )CANData.highVoltage, "6.8", sizeof(CANData.highVoltage));
 	strncpy((char* )CANData.lowVoltage, "6.4", sizeof(CANData.lowVoltage));
-	strncpy((char* )IMUData.xLat, "1.5", sizeof(IMUData.xLat));
-	strncpy((char* )IMUData.yLat, "1.2", sizeof(IMUData.yLat));
-	strncpy((char* )IMUData.zLat, "1", sizeof(IMUData.zLat));
+	strncpy((char* )IMUData.xAcc, "1.5", sizeof(IMUData.xAcc));
+	strncpy((char* )IMUData.yAcc, "1.2", sizeof(IMUData.yAcc));
+	strncpy((char* )IMUData.zAcc, "1", sizeof(IMUData.zAcc));
 	strncpy((char* )IMUData.xGyro, "20", sizeof(IMUData.xGyro));
 	strncpy((char* )IMUData.yGyro, "3", sizeof(IMUData.yGyro));
 	strncpy((char* )IMUData.zGyro, "0", sizeof(IMUData.zGyro));
@@ -237,13 +240,13 @@ int main(void)
 	strncpy((char* )auxVoltage, "16", sizeof(auxVoltage));
 #endif
 
-	UARTprintf("Entering loop");
+	//UARTprintf("Entering loop");
     // Loop forever.
     while (1)
     {
 
     	if (g_ui8xbeeFlag) {
-    		xbeeTransmit(CANData, IMUData, pumpVoltage, auxVoltage);
+    		xbeeTransmit(CANData, gIMUData, pumpVoltage, auxVoltage);
     		g_ui8xbeeFlag = 0;
     	}
 
@@ -251,7 +254,7 @@ int main(void)
     	if (g_ui8canFlag) {
     	    canReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
     	    g_ui8canFlag = 0;
-    	    UARTprintf("Compare value: %i\n", auxADCSend(auxBatVoltage));
+    	    //UARTprintf("Compare value: %i\n", auxADCSend(auxBatVoltage));
             //UARTprintf("Pump: %i", pumpADCSend(pumpVoltage));
     	}
 
@@ -280,8 +283,8 @@ int main(void)
             // Aux battery voltage stored as volts * 1000
             auxBatAdjusted = auxADCSend(auxBatVoltage);
 
-            UARTprintf("Aux Bat: %i", auxBatAdjusted);
-            UARTprintf("Pump: %i", pumpADCSend(pumpVoltage));
+            //UARTprintf("Aux Bat: %i", auxBatAdjusted);
+            //UARTprintf("Pump: %i", pumpADCSend(pumpVoltage));
 
             if (auxBatAdjusted <= 1200) {
 
@@ -654,8 +657,8 @@ uint32_t auxADCSend(uint32_t* auxBatVoltage)
     uint32_t tempTrueVoltage = (tempFloat / 218.587) * 100; // see spreadsheet
     uint32_t compareVoltage = tempTrueVoltage;
 
-    UARTprintf("Raw Value: %i\n", auxBatVoltage[0]);
-    UARTprintf("Adjusted Value: %i\n", tempTrueVoltage);
+    //UARTprintf("Raw Value: %i\n", auxBatVoltage[0]);
+    //UARTprintf("Adjusted Value: %i\n", tempTrueVoltage);
 
     convertToASCII(auxVoltage, voltageLength-1, tempTrueVoltage);
 
@@ -679,7 +682,7 @@ uint32_t auxADCSend(uint32_t* auxBatVoltage)
     asciiChars[0] = tempToTransmit % 10 + '0';
     */
 
-    UARTprintf("Put into chars: %c%c%c%c%c\n", auxVoltage[0], auxVoltage[1], auxVoltage[2], auxVoltage[3], auxVoltage[4]);
+    //UARTprintf("Put into chars: %c%c%c%c%c\n", auxVoltage[0], auxVoltage[1], auxVoltage[2], auxVoltage[3], auxVoltage[4]);
 
     /*
     uint8_t i = 0;
@@ -1055,17 +1058,155 @@ void xbeeTransmit(CANTransmitData_t CANData, IMUTransmitData_t IMUData, uint8_t*
 	UARTSendChar(UART7_BASE, ',');
 
 	// Send IMU Data
-	UARTSendStr(UART7_BASE, IMUData.xLat, sizeof(IMUData.xLat));
+	UARTSendStr(UART7_BASE, IMUData.xAcc, sizeof(IMUData.xAcc));
 	UARTSendChar(UART7_BASE, ',');
-	UARTSendStr(UART7_BASE, IMUData.yLat, sizeof(IMUData.yLat));
+	UARTSendStr(UART7_BASE, IMUData.yAcc, sizeof(IMUData.yAcc));
 	UARTSendChar(UART7_BASE, ',');
-	UARTSendStr(UART7_BASE, IMUData.zLat, sizeof(IMUData.zLat));
+	UARTSendStr(UART7_BASE, IMUData.zAcc, sizeof(IMUData.zAcc));
 	UARTSendChar(UART7_BASE, ',');
 	UARTSendStr(UART7_BASE, IMUData.xGyro, sizeof(IMUData.xGyro));
 	UARTSendChar(UART7_BASE, ',');
 	UARTSendStr(UART7_BASE, IMUData.yGyro, sizeof(IMUData.yGyro));
 	UARTSendChar(UART7_BASE, ',');
 	UARTSendStr(UART7_BASE, IMUData.zGyro, sizeof(IMUData.zGyro));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, IMUData.roll, sizeof(IMUData.roll));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, IMUData.pitch, sizeof(IMUData.pitch));
+}
+
+void imuParse(char c)
+{
+#define DEFAULT 0
+	enum {
+		ACCEL = 'a',
+		GYRO = 'g',
+		EULER = 'e',
+		ACCEL_X = 'a' + 'x',
+		ACCEL_Y = 'a' + 'y',
+		ACCEL_Z = 'a' + 'z',
+		GYRO_X = 'g' + 'x',
+		GYRO_Y = 'g' + 'y',
+		GYRO_Z = 'g' + 'z',
+		EULER_R = 'e' + 'r',
+		EULER_Y = 'e' + 'y',
+		EULER_P = 'e' + 'p',
+		COMPASS = 'c'
+	};
+	static int state = DEFAULT; // initial state will be default state
+
+	switch (state)
+	{
+	case ACCEL:
+		state = 'a' + c;
+		break;
+
+	case ACCEL_X:
+		memcpy(gIMUData.xAcc, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '0', imuLength);
+		gIMUBufIndex = 0;
+		//UARTprintf(" -- Accel-X\n\r");
+		state = DEFAULT;
+		break;
+
+	case ACCEL_Y:
+		memcpy(gIMUData.yAcc, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '0', imuLength);
+		gIMUBufIndex = 0;
+		//UARTprintf(" -- Accel-Y\n\r");
+		state = DEFAULT;
+		break;
+
+	case ACCEL_Z:
+		memcpy(gIMUData.zAcc, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '0', imuLength);
+		gIMUBufIndex = 0;
+		//UARTprintf(" -- Accel-Z\n\r");
+		state = DEFAULT;
+		break;
+
+	case GYRO:
+		state = 'g' + c;
+		break;
+
+	case GYRO_X:
+		memcpy(gIMUData.xGyro, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '0', imuLength);
+		gIMUBufIndex = 0;
+		//UARTprintf(" -- Gyro-X\n\r");
+		state = DEFAULT;
+		break;
+
+	case GYRO_Y:
+		memcpy(gIMUData.yGyro, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '0', imuLength);
+		gIMUBufIndex = 0;
+		//UARTprintf(" -- Gyro-Y\n\r");
+		state = DEFAULT;
+		break;
+
+	case GYRO_Z:
+		memcpy(gIMUData.zGyro, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '0', imuLength);
+		gIMUBufIndex = 0;
+		//UARTprintf(" -- Gyro-Z\n\r");
+		state = DEFAULT;
+		break;
+
+	case EULER:
+		state = 'e' + c;
+		break;
+
+	case EULER_R:
+		memcpy(gIMUData.roll, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '0', imuLength);
+		gIMUBufIndex = 0;
+		//UARTprintf(" -- Roll\n\r");
+		state = DEFAULT;
+		break;
+
+	case EULER_Y:
+		memcpy(gIMUData.yaw, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '0', imuLength);
+		gIMUBufIndex = 0;
+		//UARTprintf(" -- Yaw\n\r");
+		state = DEFAULT;
+		break;
+
+	case EULER_P:
+		memcpy(gIMUData.pitch, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '0', imuLength);
+		gIMUBufIndex = 0;
+		//UARTprintf(" -- Pitch\n\r");
+		state = DEFAULT;
+		break;
+
+	case COMPASS:
+		memcpy(gIMUData.compass, gIMUReceiveBuf, imuLength);
+		memset(gIMUReceiveBuf, '0', imuLength);
+		gIMUBufIndex = 0;
+		//UARTprintf(" -- Compass\n\r");
+		state = DEFAULT;
+		break;
+
+	default:
+		if ((c >= 0x30 && c <= 0x39) || c == '.' || c == '-') { // Check if the character is an ASCII number
+			// Protect against buffer overflow
+			if (gIMUBufIndex >= imuLength) {
+				memset(gIMUReceiveBuf, '0', imuLength);
+				//UARTprintf("Buffer overflow detected\n\r");
+				gIMUBufIndex = 0;
+			}
+			else {
+				gIMUReceiveBuf[gIMUBufIndex++] = c;
+				//UARTprintf("%c", c);
+			}
+		}
+		else {
+			state = c;
+		}
+		break;
+	}
 }
 
 //void UART_SendComma()
@@ -1104,6 +1245,7 @@ void TIMER1A_IRQHandler()
 
 void UART6_IRQHandler(void)
 {
+	//UARTprintf("Entered UART6 ISR\n");
     uint32_t ui32Status;
 
     //
@@ -1122,7 +1264,8 @@ void UART6_IRQHandler(void)
     while(MAP_UARTCharsAvail(UART6_BASE))
     {
     	char c = MAP_UARTCharGetNonBlocking(UART6_BASE);
+    	//UARTprintf(c);
     	//MAP_UARTCharPutNonBlocking(UART0_BASE, c);
-    	//imuParse(c);
+    	imuParse(c);
     }
 }
