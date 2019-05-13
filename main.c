@@ -58,6 +58,21 @@
 #define lowTempByte      2
 #define tempLength       5
 
+#define motorTempID		 0x0A2
+#define motorTempByte	 0
+#define motorCtrlTempID  0x0A0
+#define motorCtrlTempByte 6
+#define motorTempLength  6 // Motor temperature ranges from -3276.8 to +3276.7 C
+#define motorCtrlTempLen 6
+
+#define dcBusCurrentID	 0x0A6
+#define dcBusCurrentByte 6
+#define dcBusCurrentLen	 6 // DC Bus current ranges from -3276.8 to +3276.7 Amps
+
+#define motorTorqueID	 0x0AC
+#define motorTorqueByte  0
+#define motorTorqueLen	 6 // Motor torque ranges from -3276.8 to +3276.7 N-m
+
 #define highVoltageID    0x6B3
 #define highVoltageByte  2
 #define lowVoltageID     0x6B3
@@ -93,6 +108,10 @@ typedef struct {                         // Multiplication factors (units) from 
     uint8_t highVoltage[voltageLength];  // 0.0001 (V)
     uint8_t lowVoltage[voltageLength];   // 0.0001 (V)
     uint8_t RPM[RPM_LEN];                // 1 (rpm)
+    uint8_t motorTemp[motorTempLength];
+    uint8_t motorCtrlTemp[motorCtrlTempLen];
+    uint8_t motorTorque[motorTorqueLen];
+    uint8_t dcBusCurrent[dcBusCurrentLen];
 } CANTransmitData_t;
 
 
@@ -199,8 +218,18 @@ int main(void)
     uint8_t msgData[8] = {0x00, 0x00, 0x00, 0x00,
                           0x00, 0x00, 0x00, 0x00};
 
-    // Instantiate IMU object
-    IMUTransmitData_t IMUData;
+    // Initialize IMU object
+    memset(gIMUData.xAcc, '0', imuLength);
+    memset(gIMUData.yAcc, '0', imuLength);
+    memset(gIMUData.zAcc, '0', imuLength);
+    memset(gIMUData.xGyro, '0', imuLength);
+    memset(gIMUData.yGyro, '0', imuLength);
+    memset(gIMUData.zGyro, '0', imuLength);
+    memset(gIMUData.roll, '0', imuLength);
+    memset(gIMUData.pitch, '0', imuLength);
+    memset(gIMUData.yaw, '0', imuLength);
+    memset(gIMUData.compass, '0', imuLength);
+
 
     memset(auxVoltage, '0', sizeof(auxVoltage));
     uint32_t auxBatVoltage[1];
@@ -907,6 +936,10 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData, uint8_t 
             static uint16_t highVoltTemp = 24;
             static uint16_t lowVoltTemp = 25;
             static int16_t rpmTemp = 26;
+            static int16_t motorTempTemp = 27;
+            static int16_t motorCtrlTempTemp = 28;
+            static uint16_t dcBusCurrentTemp = 29;
+            static uint16_t motorTorqueTemp = 30;
 
             // Populates the temporary variables
             if (sCANMessage->ui32MsgID == highTempID) {
@@ -930,6 +963,18 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData, uint8_t 
             if (sCANMessage->ui32MsgID == RPM_ID) {
                 rpmTemp = (msgData[RPM_BYTE+1] << 8) | msgData[RPM_BYTE];
             }
+            if (sCANMessage->ui32MsgID == motorTempID) {
+            	motorTempTemp = (msgData[motorTempByte+1] << 8) | msgData[motorTempByte];
+            }
+            if (sCANMessage->ui32MsgID == motorCtrlTempID) {
+            	motorCtrlTempTemp = (msgData[motorCtrlTempByte+1] << 8) | msgData[motorCtrlTempByte];
+            }
+            if (sCANMessage->ui32MsgID == motorTorqueID) {
+            	motorTorqueTemp = (msgData[motorTorqueByte+1] << 8) | msgData[motorTorqueByte];
+            }
+            if (sCANMessage->ui32MsgID == dcBusCurrentID) {
+            	dcBusCurrentTemp = (msgData[dcBusCurrentByte+1] << 8) | msgData[dcBusCurrentByte];
+            }
 
             /* Set ID to 0 so the next message can be received
              * May be unnecessary */
@@ -943,6 +988,10 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData, uint8_t 
             convertToASCII(CANData->lowVoltage, 5, lowVoltTemp);
             convertToASCII(CANData->highVoltage, 5, highVoltTemp);
             convertToASCII(CANData->RPM, RPM_LEN, rpmTemp);
+            convertToASCII(CANData->motorTemp, motorTempLength, motorTempTemp);
+            convertToASCII(CANData->motorCtrlTemp, motorCtrlTempLen, motorCtrlTempTemp);
+            convertToASCII(CANData->motorTorque, motorTorqueLen, motorTorqueTemp);
+            convertToASCII(CANData->dcBusCurrent, dcBusCurrentLen, dcBusCurrentTemp);
 
             // Print to UART console
 /*
@@ -1047,6 +1096,14 @@ void xbeeTransmit(CANTransmitData_t CANData, IMUTransmitData_t IMUData, uint8_t*
 	UARTSendStr(UART7_BASE, CANData.lowVoltage, sizeof(CANData.lowVoltage));
 	UARTSendChar(UART7_BASE, ',');
 	UARTSendStr(UART7_BASE, CANData.RPM, sizeof(CANData.RPM));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, CANData.motorTemp, sizeof(CANData.motorTemp));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, CANData.dcBusCurrent, sizeof(CANData.dcBusCurrent));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, CANData.motorTorque, sizeof(CANData.motorTorque));
+	UARTSendChar(UART7_BASE, ',');
+	UARTSendStr(UART7_BASE, CANData.motorCtrlTemp, sizeof(CANData.motorCtrlTemp));
 	UARTSendChar(UART7_BASE, ',');
 
 	// Send Pump Voltage
