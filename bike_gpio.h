@@ -1,0 +1,4 @@
+#ifndef BIKE_GPIO_INCLUDED
+#define BIKE_GPIO_INCLUDED
+
+#endif
