@@ -41,51 +41,10 @@
 #include <stdlib.h>
 #include "uartstdio.h"
 
-// ID of each CAN message
-// Byte the message starts at (out of 8)
-// ASCII length of data (1 data bytes -> 3 ASCII bytes, 2 data bytes -> 5 ASCII bytes)
-#define SOC_ID           0x6B0
-#define SOC_byte         4
-#define SOC_length       3
+#include "can_comms.h"
+#include "uart_comms.h"
 
-#define FPV_ID           0x6B0
-#define FPV_byte         2
-#define FPV_length       5
 
-#define highTempID       0x6B4
-#define highTempByte     0
-#define lowTempID        0x6B4
-#define lowTempByte      2
-#define tempLength       5
-
-#define motorTempID		 0x0A2
-#define motorTempByte	 0
-#define motorCtrlTempID  0x0A0
-#define motorCtrlTempByte 6
-#define motorTempLength  6 // Motor temperature ranges from -3276.8 to +3276.7 C
-#define motorCtrlTempLen 6
-
-#define dcBusCurrentID	 0x0A6
-#define dcBusCurrentByte 6
-#define dcBusCurrentLen	 6 // DC Bus current ranges from -3276.8 to +3276.7 Amps
-
-#define motorTorqueID	 0x0AC
-#define motorTorqueByte  0
-#define motorTorqueLen	 6 // Motor torque ranges from -3276.8 to +3276.7 N-m
-
-#define highVoltageID    0x6B3
-#define highVoltageByte  2
-#define lowVoltageID     0x6B3
-#define lowVoltageByte   4
-#define voltageLength    5
-#define imuLength		 9
-
-#define RPM_ID           0x0A5
-#define RPM_BYTE         2
-#define RPM_LEN          6 //due to possible negative, will have leading 0 if positive
-
-#define UART_2_EN
-//#define XBEE_PLACEHOLDER_DATA
 
 #define IGNIT_CUTOFF_DELAY	70
 #define IMU_RECEIVE_BAUD 57600
@@ -93,27 +52,6 @@
 
 /* Configure system clock for 120 MHz */
 uint32_t systemClock;
-
-/* CAN variables */
-bool rxMsg = false;
-bool errFlag = false;
-uint32_t msgCount = 0;
-
-// CAN data struct
-typedef struct {                         // Multiplication factors (units) from the BMS utility manual
-    uint8_t SOC[SOC_length];             // 0.5 (%)
-    uint8_t FPV[FPV_length];             // 0.1 (V)
-    uint8_t highTemp[tempLength];        // 1 (degrees C) (BOLT3 data indicates 0.1)
-    uint8_t lowTemp[tempLength];         // 1 (degrees C) (BOLT3 data indicates 0.1)
-    uint8_t highVoltage[voltageLength];  // 0.0001 (V)
-    uint8_t lowVoltage[voltageLength];   // 0.0001 (V)
-    uint8_t RPM[RPM_LEN];                // 1 (rpm)
-    uint8_t motorTemp[motorTempLength];
-    uint8_t motorCtrlTemp[motorCtrlTempLen];
-    uint8_t motorTorque[motorTorqueLen];
-    uint8_t dcBusCurrent[dcBusCurrentLen];
-} CANTransmitData_t;
-
 
 // IMU data struct
 typedef struct {
@@ -170,17 +108,11 @@ typedef enum ignitState { IGNIT_OFF = 0, IGNIT_ON = 1 } ignitState_t;
 #define REQSECCOUNT 360000000
 
 // Function prototypes
-//void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
-void UARTSendChar(uint32_t, const char);
-void UARTSendCharNonBlocking(uint32_t, const char);
-void UARTSendStr(uint32_t, const uint8_t*, uint32_t);
-void UARTSendStrNonBlocking(uint32_t, const uint8_t*, uint32_t);
-//void UART_SendComma();
+
 void ADCSetup();
 uint32_t auxADCSend(uint32_t* auxBatVoltage);
 uint32_t pumpADCSend(uint32_t* pumpVoltage);
-void UART7Setup();
-void UART6Setup(void);
+
 void accIgnDESetup(void);
 void timerSetup();
 void timerRun();
@@ -188,16 +120,13 @@ bool ignitDebounce(bool, uint32_t*, uint8_t*);
 bool ignitPoll(void);
 bool accPoll(void);
 bool DEPoll(void);
-void canSetup(tCANMsgObject* message);
-void configureCAN();
-void canReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANdata,
-                uint8_t msgDataIndex, uint8_t* msgData);
+
 // This function can handle signed and unsigned from -32767 to +32767
 void convertToASCII(uint8_t* chars, uint8_t digits, int32_t num);
-void enableUARTprintf();
+
 void initTimers();
 void TIMER1A_IRQHandler();
-void UART6_IRQHandler(void);
+
 void xbeeTransmit(CANTransmitData_t, IMUTransmitData_t, uint8_t*, uint8_t*);
 void imuParse(char c);
 
@@ -823,195 +752,6 @@ void enableUARTprintf()
 
     /* Initialize the UART for console I/O */
     UARTStdioConfig(2, 115200, systemClock);
-}
-
-void canSetup(tCANMsgObject* message)
-{
-    /* Enable the clock to the GPIO Port J and wait for it to be ready */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
-    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA)))
-    {
-    }
-
-    /* Initialize the CAN */
-    configureCAN();
-
-    /* Initialize message object 1 to be able to receive any CAN message ID.
-     * In order to receive any CAN ID, the ID and mask must both be set to 0,
-     * and the ID filter enabled */
-    message->ui32MsgID = 0;
-    message->ui32MsgIDMask = 0;
-
-    /* Enable interrupt on RX and Filter ID */
-    message->ui32Flags = MSG_OBJ_RX_INT_ENABLE | MSG_OBJ_USE_ID_FILTER;
-
-    /* Size of message is 8 */
-    message->ui32MsgLen = 8; //could also be sizeof(msgData)
-
-    /* Load the message object into the CAN peripheral. Once loaded an
-     * interrupt will occur any time a CAN message is received. Use message
-     * object 1 for receiving messages */
-    MAP_CANMessageSet(CAN0_BASE, 1, message, MSG_OBJ_TYPE_RX);
-}
-
-void configureCAN(void)
-{
-    /* Configure the CAN and its pins PA0 and PA1 @ 500Kbps */
-
-    /* Enable the clock to the GPIO Port A and wait for it to be ready */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
-    while(!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA)))
-    {
-    }
-
-    /* Enable CAN0 */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_CAN0);
-
-    /* Configure GPIO Pins for CAN mode */
-    MAP_GPIOPinConfigure(GPIO_PA0_CAN0RX);
-    MAP_GPIOPinConfigure(GPIO_PA1_CAN0TX);
-    MAP_GPIOPinTypeCAN(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
-
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOL);
-    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOL)){};
-
-    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTL_BASE, GPIO_PIN_3);
-    MAP_GPIOPinWrite(GPIO_PORTL_BASE, GPIO_PIN_3, ~(GPIO_PIN_3));
-
-    /* Initialize the CAN controller */
-    MAP_CANInit(CAN0_BASE);
-
-    /* Set up the bit rate for the CAN bus.  CAN bus is set to 500 Kbps */
-    MAP_CANBitRateSet(CAN0_BASE, systemClock, 500000);
-
-    /* Enable interrupts on the CAN peripheral */
-    MAP_CANIntEnable(CAN0_BASE, CAN_INT_MASTER | CAN_INT_ERROR | CAN_INT_STATUS);
-
-    /* Enable the CAN interrupt */
-    MAP_IntEnable(INT_CAN0);
-
-    /* Enable the CAN for operation */
-    MAP_CANEnable(CAN0_BASE);
-}
-
-void canReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData, uint8_t msgDataIndex, uint8_t* msgData)
-{
-    uint8_t cycleMsgs = 0;
-    /* A new message is received */
-    while (cycleMsgs <= 6)
-    {
-        cycleMsgs++;
-        //UARTprintf("In canReceive loop, cycleMsgs = %d\n", cycleMsgs);
-        if (rxMsg)
-        {
-            /* Re-use the same message object that was used earlier to configure
-             * the CAN */
-            sCANMessage->pui8MsgData = (uint8_t *)msgData;
-
-            /* Read the message from the CAN */
-            MAP_CANMessageGet(CAN0_BASE, 1, sCANMessage, 0);
-
-            // Set rxMsg to false since data has been put into the object
-            // The next message will stay in the buffer until CANMessageGet() is called again
-            //The interrupt functi.on sets rxMsg to true to satisfy the if statement
-            rxMsg = false;
-
-            /* Print a message to the console showing the message count and the
-             * contents of the received message
-            UARTprintf("Message length: %i \n", sCANMessage->ui32MsgLen);
-            UARTprintf("Received msg 0x%03X: ",sCANMessage->ui32MsgID);
-            for (msgDataIndex = 0; msgDataIndex < sCANMessage->ui32MsgLen;
-                    msgDataIndex++)
-            {
-                UARTprintf("0x%02X ", msgData[msgDataIndex]);
-            }
-
-            /* Print the count of message sent
-            UARTprintf(" total count = %u\n", msgCount);*/
-
-            static uint8_t SOCtemp = 20;
-            static uint16_t FPVtemp = 21;
-            static uint16_t highTempTemp = 10;
-            static uint16_t lowTempTemp = 10;
-            static uint16_t highVoltTemp = 24;
-            static uint16_t lowVoltTemp = 25;
-            static int16_t rpmTemp = 26;
-            static int16_t motorTempTemp = 27;
-            static int16_t motorCtrlTempTemp = 28;
-            static uint16_t dcBusCurrentTemp = 29;
-            static uint16_t motorTorqueTemp = 30;
-
-            // Populates the temporary variables
-            if (sCANMessage->ui32MsgID == highTempID) {
-                highTempTemp = (msgData[highTempByte+1] << 8) | msgData[highTempByte];
-            }
-            if (sCANMessage->ui32MsgID == lowTempID) {
-                lowTempTemp = (msgData[lowTempByte+1] << 8) | msgData[lowTempByte];
-            }
-            if (sCANMessage->ui32MsgID == SOC_ID) {
-                SOCtemp = msgData[SOC_byte];
-            }
-            if (sCANMessage->ui32MsgID == FPV_ID) {
-                FPVtemp = (msgData[FPV_byte+1] << 8) | msgData[FPV_byte];
-            }
-            if (sCANMessage->ui32MsgID == highVoltageID) {
-                highVoltTemp = (msgData[highVoltageByte+1] << 8) | msgData[highVoltageByte];
-            }
-            if (sCANMessage->ui32MsgID == lowVoltageID) {
-                lowVoltTemp = (msgData[lowVoltageByte+1] << 8) | msgData[lowVoltageByte];
-            }
-            if (sCANMessage->ui32MsgID == RPM_ID) {
-                rpmTemp = (msgData[RPM_BYTE+1] << 8) | msgData[RPM_BYTE];
-            }
-            if (sCANMessage->ui32MsgID == motorTempID) {
-            	motorTempTemp = (msgData[motorTempByte+1] << 8) | msgData[motorTempByte];
-            }
-            if (sCANMessage->ui32MsgID == motorCtrlTempID) {
-            	motorCtrlTempTemp = (msgData[motorCtrlTempByte+1] << 8) | msgData[motorCtrlTempByte];
-            }
-            if (sCANMessage->ui32MsgID == motorTorqueID) {
-            	motorTorqueTemp = (msgData[motorTorqueByte+1] << 8) | msgData[motorTorqueByte];
-            }
-            if (sCANMessage->ui32MsgID == dcBusCurrentID) {
-            	dcBusCurrentTemp = (msgData[dcBusCurrentByte+1] << 8) | msgData[dcBusCurrentByte];
-            }
-
-            /* Set ID to 0 so the next message can be received
-             * May be unnecessary */
-            sCANMessage->ui32MsgID = 0;
-
-            // Processes numbers into ASCII
-            convertToASCII(CANData->SOC, 3, SOCtemp);
-            convertToASCII(CANData->FPV, 5, FPVtemp);
-            convertToASCII(CANData->highTemp, 5, highTempTemp);
-            convertToASCII(CANData->lowTemp, 5, lowTempTemp);
-            convertToASCII(CANData->lowVoltage, 5, lowVoltTemp);
-            convertToASCII(CANData->highVoltage, 5, highVoltTemp);
-            convertToASCII(CANData->RPM, RPM_LEN, rpmTemp);
-            convertToASCII(CANData->motorTemp, motorTempLength, motorTempTemp);
-            convertToASCII(CANData->motorCtrlTemp, motorCtrlTempLen, motorCtrlTempTemp);
-            convertToASCII(CANData->motorTorque, motorTorqueLen, motorTorqueTemp);
-            convertToASCII(CANData->dcBusCurrent, dcBusCurrentLen, dcBusCurrentTemp);
-
-            // Print to UART console
-/*
-            UARTprintf("SOC: %c%c%c\n", CANData->SOC[0], CANData->SOC[1], CANData->SOC[2]);
-            UARTprintf("FPV: %c%c%c%c%c\n", CANData->FPV[0], CANData->FPV[1], CANData->FPV[2], CANData->FPV[3], CANData->FPV[4]);
-            UARTprintf("highTemp: %c%c%c%c%c\n", CANData->highTemp[0], CANData->highTemp[1], CANData->highTemp[2], CANData->highTemp[3], CANData->highTemp[4]);
-            UARTprintf("lowTemp: %c%c%c%c%c\n", CANData->lowTemp[0], CANData->lowTemp[1], CANData->lowTemp[2], CANData->lowTemp[3], CANData->lowTemp[4]);
-            UARTprintf("highVoltage: %c%c%c%c%c\n", CANData->highVoltage[0], CANData->highVoltage[1], CANData->highVoltage[2], CANData->highVoltage[3], CANData->highVoltage[4]);
-            UARTprintf("lowVoltage: %c%c%c%c%c\n", CANData->lowVoltage[0], CANData->lowVoltage[1], CANData->lowVoltage[2], CANData->lowVoltage[3], CANData->lowVoltage[4]);
-            UARTprintf("RPM: %c%c%c%c%c%c\n", CANData->RPM[0], CANData->RPM[1], CANData->RPM[2], CANData->RPM[3], CANData->RPM[4], CANData->RPM[5]);
-*/        }
-
-        else
-        {
-            if(errFlag)
-            {
-                UARTprintf("Error: Problem while receiving CAN interrupt\n");
-            }
-        }
-    }
 }
 
 void convertToASCII(uint8_t* chars, uint8_t digits, int32_t num)
