@@ -1,6 +1,7 @@
 #include "msp.h"
 
 /* Standard driverlib include - can be more specific if needed */
+#include <globals.h>
 #include <ti/devices/msp432e4/driverlib/driverlib.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -12,10 +13,8 @@
 #include "can_comms.h"
 #include "uart_comms.h"
 
-/* CAN variables */
-bool rxMsg = false;
-bool errFlag = false;
-uint32_t msgCount = 0;
+// This function can handle signed and unsigned from -32767 to +32767
+extern void convertToASCII(uint8_t* chars, uint8_t digits, int32_t num);
 
 void canSetup(tCANMsgObject* message)
 {

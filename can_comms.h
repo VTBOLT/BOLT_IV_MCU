@@ -1,6 +1,10 @@
 #ifndef CAN_COMMS_INCLUDED
 #define CAN_COMMS_INCLUDED
 
+#define IGNIT_CUTOFF_DELAY  70
+#define IMU_RECEIVE_BAUD 57600
+#define XBEE_BAUD_RATE 57600
+
 // ID of each CAN message
 // Byte the message starts at (out of 8)
 // ASCII length of data (1 data bytes -> 3 ASCII bytes, 2 data bytes -> 5 ASCII bytes)
