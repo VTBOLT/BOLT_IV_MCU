@@ -19,3 +19,9 @@ uint32_t msgCount = 0;
 
 /* Configure system clock for 120 MHz */
 uint32_t systemClock;
+
+// Timer 1 flag
+uint8_t intTimer1_flag = 0;
+
+// Debounce counter
+uint32_t debounceCounter = 0;
