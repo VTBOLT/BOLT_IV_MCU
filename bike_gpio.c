@@ -173,5 +173,3 @@ bool DEPoll(void)
 
 
 
-
-#endif

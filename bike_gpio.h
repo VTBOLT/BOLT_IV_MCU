@@ -8,3 +8,4 @@ bool ignitPoll(void);
 bool accPoll(void);
 bool DEPoll(void);
 
+#endif

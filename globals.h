@@ -1,7 +1,9 @@
 #ifndef GLOBALS_INCLUDED
 #define GLOBALS_INCLUDED
 
+#include <stdint.h>
 #include <stdbool.h>
+#include <can_comms.h>
 
 typedef enum ignitState { IGNIT_OFF = 0, IGNIT_ON = 1 } ignitState_t;
 
@@ -18,6 +20,9 @@ extern uint8_t intTimer1_flag;
 
 // Debounce counter
 extern uint32_t debounceCounter;
+
+// AUX pack voltage
+extern uint8_t auxVoltage[voltageLength];
 
 
 #endif

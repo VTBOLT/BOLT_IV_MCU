@@ -1,6 +1,23 @@
 #ifndef CAN_COMMS_INCLUDED
 #define CAN_COMMS_INCLUDED
 
+#include "msp.h"
+
+/* Standard driverlib include - can be more specific if needed */
+#include <globals.h>
+#include <ti/devices/msp432e4/driverlib/driverlib.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include "uartstdio.h"
+
+#include "can_comms.h"
+#include "uart_comms.h"
+#include "bike_gpio.h"
+#include "bike_adc.h"
+
 #define IGNIT_CUTOFF_DELAY  70
 #define IMU_RECEIVE_BAUD 57600
 #define XBEE_BAUD_RATE 57600

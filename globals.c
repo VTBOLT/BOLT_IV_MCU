@@ -1,6 +1,3 @@
-#include "msp.h"
-
-/* Standard driverlib include - can be more specific if needed */
 #include <globals.h>
 #include <ti/devices/msp432e4/driverlib/driverlib.h>
 #include <stdint.h>
@@ -12,6 +9,8 @@
 
 #include "can_comms.h"
 #include "uart_comms.h"
+#include "bike_gpio.h"
+#include "bike_adc.h"
 
 bool rxMsg = false;
 bool errFlag = false;
@@ -25,3 +24,6 @@ uint8_t intTimer1_flag = 0;
 
 // Debounce counter
 uint32_t debounceCounter = 0;
+
+// AUX pack voltage
+uint8_t auxVoltage[voltageLength];
