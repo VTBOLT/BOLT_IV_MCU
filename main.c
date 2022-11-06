@@ -179,6 +179,8 @@ void UARTSendStrNonBlocking(uint32_t, const uint8_t*, uint32_t);
 void ADCSetup();
 uint32_t auxADCSend(uint32_t* auxBatVoltage);
 uint32_t pumpADCSend(uint32_t* pumpVoltage);
+void canSendData(int id, char* data);
+void canSendData_Int(int id, int data, int digits);
 void UART7Setup();
 void UART6Setup(void);
 void accIgnDESetup(void);
@@ -248,7 +250,7 @@ int main(void)
     MAP_IntMasterEnable();
 
     enableUARTprintf();
-    //UARTprintf("UARTprintf enabled\n");
+    UARTprintf("UARTprintf enabled\n");
 
     states_t present = PCB;
 
@@ -274,13 +276,14 @@ int main(void)
     while (1)
     {
 
-    	if (g_ui8xbeeFlag) {
+        if (g_ui8xbeeFlag) {
     		xbeeTransmit(CANData, gIMUData, pumpVoltage, auxVoltage);
     		g_ui8xbeeFlag = 0;
     	}
 
         // As long as the PCB is on, CAN should be read
     	if (g_ui8canFlag) {
+    	    canSendData_Int(31, auxADCSend(auxBatVoltage), 4);
     	    canReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
     	    g_ui8canFlag = 0;
     	    //UARTprintf("Compare value: %i\n", auxADCSend(auxBatVoltage));
@@ -415,6 +418,55 @@ int main(void)
 
         }
     }
+}
+
+/*
+ *
+ */
+void canSendData(int id, char* data)
+{
+    uint32_t dataLength = strlen(data);
+    uint8_t msgData[8] = {0x00, 0x00, 0x00, 0x00, 0x4B, 0x6B, 0x4B, 0x6B};
+    //UARTprintf("Length is %d \n", dataLength);
+    int i;
+    
+    // fill the beginning of the message with null characters
+    for(i=0; i<8-dataLength; i++)
+    {
+        msgData[i] = 0x00;
+    }
+
+    // fill the rest of the 8 bytes with the actual message
+    for(i=8-dataLength; i<8; i++)
+    {
+        msgData[i] = (uint8_t)(data[i-8+dataLength]);
+        //UARTprintf("%X", (ASCII)data[i-8+dataLength]);
+    }
+    for(i=0; i<8; i++)
+    {
+        UARTprintf("%X ", msgData[i]);
+    }
+    UARTprintf("\n");
+
+    tCANMsgObject message;
+    message.ui32MsgID = id;
+    message.ui32MsgIDMask = 0;
+    message.ui32Flags = MSG_OBJ_TX_INT_ENABLE;
+    message.ui32MsgLen = sizeof(msgData);
+    message.pui8MsgData = msgData;
+
+    MAP_CANMessageSet(CAN0_BASE, 1, &message, MSG_OBJ_TYPE_TX);
+    // get required number of 0's
+    // write that number of 0's
+
+    // message id = 1+last one
+    // convert value into 8 separate bytes - send 64 bits
+}
+
+void canSendData_Int(int id, int data, int digits){
+    char str[digits];
+    sprintf(str, "%d", data);
+    canSendData(id, str);
 }
 
 void accIgnDESetup(void)
@@ -994,7 +1046,7 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData, uint8_t 
             convertToASCII(CANData->dcBusCurrent, dcBusCurrentLen, dcBusCurrentTemp);
 
             // Print to UART console
-/*
+    /*
             UARTprintf("SOC: %c%c%c\n", CANData->SOC[0], CANData->SOC[1], CANData->SOC[2]);
             UARTprintf("FPV: %c%c%c%c%c\n", CANData->FPV[0], CANData->FPV[1], CANData->FPV[2], CANData->FPV[3], CANData->FPV[4]);
             UARTprintf("highTemp: %c%c%c%c%c\n", CANData->highTemp[0], CANData->highTemp[1], CANData->highTemp[2], CANData->highTemp[3], CANData->highTemp[4]);
@@ -1002,7 +1054,7 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData, uint8_t 
             UARTprintf("highVoltage: %c%c%c%c%c\n", CANData->highVoltage[0], CANData->highVoltage[1], CANData->highVoltage[2], CANData->highVoltage[3], CANData->highVoltage[4]);
             UARTprintf("lowVoltage: %c%c%c%c%c\n", CANData->lowVoltage[0], CANData->lowVoltage[1], CANData->lowVoltage[2], CANData->lowVoltage[3], CANData->lowVoltage[4]);
             UARTprintf("RPM: %c%c%c%c%c%c\n", CANData->RPM[0], CANData->RPM[1], CANData->RPM[2], CANData->RPM[3], CANData->RPM[4], CANData->RPM[5]);
-*/        }
+    */        }
 
         else
         {
@@ -1046,7 +1098,7 @@ void CAN0_IRQHandler(void) // Uses CAN0, on J5
 
         /* Set a flag to indicate some errors may have occurred */
         errFlag = true;
-/*
+        /*
         UARTprintf("canStatus: %08X\n", canStatus);
 
         uint32_t rxErr, txErr;
