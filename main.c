@@ -179,7 +179,7 @@ void UARTSendStrNonBlocking(uint32_t, const uint8_t*, uint32_t);
 void ADCSetup();
 uint32_t auxADCSend(uint32_t* auxBatVoltage);
 uint32_t pumpADCSend(uint32_t* pumpVoltage);
-void canSendData(int id, char* data);
+void canSendData(int id, char* data); // send AUX battery voltage over CAN
 void canSendData_Int(int id, int data, int digits);
 void UART7Setup();
 void UART6Setup(void);
@@ -420,9 +420,7 @@ int main(void)
     }
 }
 
-/*
- *
- */
+//Takes in id of voltage and the current voltage and sends the voltage value over CAN
 void canSendData(int id, char* data)
 {
     uint32_t dataLength = strlen(data);
@@ -442,12 +440,15 @@ void canSendData(int id, char* data)
         msgData[i] = (uint8_t)(data[i-8+dataLength]);
         //UARTprintf("%X", (ASCII)data[i-8+dataLength]);
     }
-    for(i=0; i<8; i++)
+
+    /*for(i=0; i<8; i++)
     {
         UARTprintf("%X ", msgData[i]);
     }
     UARTprintf("\n");
+    */
 
+    // send over CAN
     tCANMsgObject message;
     message.ui32MsgID = id;
     message.ui32MsgIDMask = 0;
@@ -456,13 +457,9 @@ void canSendData(int id, char* data)
     message.pui8MsgData = msgData;
 
     MAP_CANMessageSet(CAN0_BASE, 1, &message, MSG_OBJ_TYPE_TX);
-    // get required number of 0's
-    // write that number of 0's
-
-    // message id = 1+last one
-    // convert value into 8 separate bytes - send 64 bits
 }
 
+// takes in the voltage value as an integer and converts it to a string
 void canSendData_Int(int id, int data, int digits){
     char str[digits];
     sprintf(str, "%d", data);
