@@ -58,6 +58,9 @@
 #define lowTempByte      2
 #define tempLength       5
 
+#define auxVoltageID     0xC00
+#define auxVoltageLength 4
+
 #define motorTempID		 0x0A2
 #define motorTempByte	 0
 #define motorCtrlTempID  0x0A0
@@ -424,7 +427,7 @@ int main(void)
 void canSendData(int id, char* data)
 {
     uint32_t dataLength = strlen(data);
-    uint8_t msgData[8] = {0x00, 0x00, 0x00, 0x00, 0x4B, 0x6B, 0x4B, 0x6B};
+    uint8_t msgData[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     //UARTprintf("Length is %d \n", dataLength);
     int i;
     
