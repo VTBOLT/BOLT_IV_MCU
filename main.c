@@ -464,7 +464,8 @@ void canSendData(int id, char* data)
 
 // takes in the voltage value as an integer and converts it to a string
 void canSendData_Int(int id, int data, int digits){
-    char str[digits];
+
+    char* str;
     sprintf(str, "%d", data);
     canSendData(id, str);
 }
