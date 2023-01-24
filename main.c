@@ -58,7 +58,7 @@
 #define lowTempByte      2
 #define tempLength       5
 
-#define auxVoltageID     0xC00
+#define auxVoltageID     0x700
 #define auxVoltageLength 4
 
 #define motorTempID		 0x0A2
@@ -807,6 +807,8 @@ void UART6Setup(void)
 	MAP_UARTIntEnable(UART6_BASE, UART_INT_RX | UART_INT_RT);
 }
 
+// MAP_
+
 void UART7Setup()
 {
     /* UART Transmit Setup */
@@ -935,7 +937,7 @@ void configureCAN(void)
     MAP_CANInit(CAN0_BASE);
 
     /* Set up the bit rate for the CAN bus.  CAN bus is set to 500 Kbps */
-    MAP_CANBitRateSet(CAN0_BASE, systemClock, 250000);
+    MAP_CANBitRateSet(CAN0_BASE, systemClock, 500000);
 
     /* Enable interrupts on the CAN peripheral */
     MAP_CANIntEnable(CAN0_BASE, CAN_INT_MASTER | CAN_INT_ERROR | CAN_INT_STATUS);
