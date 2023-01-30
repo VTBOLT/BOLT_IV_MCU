@@ -183,7 +183,7 @@ void UARTSendStrNonBlocking(uint32_t, const uint8_t*, uint32_t);
 void ADCSetup();
 uint32_t auxADCSend(uint32_t* auxBatVoltage);
 uint32_t pumpADCSend(uint32_t* pumpVoltage);
-void canSendData(int id, int data);  // send AUX battery voltage over CAN
+void CANSendData(int id, int data);  // send AUX battery voltage over CAN
 void UART7Setup();
 void UART6Setup(void);
 void accIgnDESetup(void);
@@ -193,9 +193,9 @@ bool ignitDebounce(bool, uint32_t*, uint8_t*);
 bool ignitPoll(void);
 bool accPoll(void);
 bool DEPoll(void);
-void canSetup(tCANMsgObject* message);
+void CANSetup(tCANMsgObject* message);
 void configureCAN();
-void canReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANdata,
+void CANReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANdata,
                 uint8_t msgDataIndex, uint8_t* msgData);
 // This function can handle signed and unsigned from -32767 to +32767
 void convertToASCII(uint8_t* chars, uint8_t digits, int32_t num);
@@ -242,7 +242,7 @@ int main(void) {
   UART6Setup();
   accIgnDESetup();
   configureCAN();
-  canSetup(&sCANMessage);
+  CANSetup(&sCANMessage);
 
   // Enable interrupts globally
   MAP_IntMasterEnable();
@@ -279,8 +279,8 @@ int main(void) {
 
     // As long as the PCB is on, CAN should be read
     if (g_ui8canFlag) {
-      canSendData(31, auxADCSend(auxBatVoltage), 4);
-      canReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
+      CANSendData(31, auxADCSend(auxBatVoltage), 4);
+      CANReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
       g_ui8canFlag = 0;
       // UARTprintf("Compare value: %i\n", auxADCSend(auxBatVoltage));
       // UARTprintf("Pump: %i", pumpADCSend(pumpVoltage));
@@ -404,7 +404,7 @@ int main(void) {
 
 // Takes in id of voltage and the current voltage and sends the voltage value
 // over CAN
-void canSendData(int id, int data) {
+void CANSendData(int id, int data) {
   uint32_t dataLength = strlen(data);
   uint8_t msgData[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
   // UARTprintf("Length is %d \n", dataLength);
@@ -768,10 +768,6 @@ void UART6Setup(void) {
   MAP_UARTIntEnable(UART6_BASE, UART_INT_RX | UART_INT_RT);
 }
 
-// MAP_
-
-// MAP_
-
 void UART7Setup() {
   /* UART Transmit Setup */
 
@@ -843,7 +839,7 @@ void enableUARTprintf() {
   UARTStdioConfig(2, 115200, systemClock);
 }
 
-void canSetup(tCANMsgObject* message) {
+void CANSetup(tCANMsgObject* message) {
   /* Enable the clock to the GPIO Port J and wait for it to be ready */
   MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
   while (!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA))) {
@@ -909,13 +905,13 @@ void configureCAN(void) {
   MAP_CANEnable(CAN0_BASE);
 }
 
-void canReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData,
+void CANReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData,
                 uint8_t msgDataIndex, uint8_t* msgData) {
   uint8_t cycleMsgs = 0;
   /* A new message is received */
   while (cycleMsgs <= 6) {
     cycleMsgs++;
-    // UARTprintf("In canReceive loop, cycleMsgs = %d\n", cycleMsgs);
+    // UARTprintf("In CANReceive loop, cycleMsgs = %d\n", cycleMsgs);
     if (rxMsg) {
       /* Re-use the same message object that was used earlier to configure
        * the CAN */
