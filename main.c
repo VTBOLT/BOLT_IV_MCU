@@ -113,7 +113,6 @@ void UARTSendChar(uint32_t, const char);
 void UARTSendCharNonBlocking(uint32_t, const char);
 void UARTSendStr(uint32_t, const uint8_t*, uint32_t);
 void UARTSendStrNonBlocking(uint32_t, const uint8_t*, uint32_t);
-// void UART_SendComma();
 void ADCSetup();
 uint32_t auxADCSend(uint32_t* auxBatVoltage);
 uint32_t pumpADCSend(uint32_t* pumpVoltage);
@@ -781,7 +780,6 @@ void xbeeTransmit(CANTransmitData_t CANData, IMUTransmitData_t IMUData,
 
   // Send Pump Voltage
   // UARTSend(pumpVoltage, sizeof(pumpVoltage));
-  // UART_SendComma();
 
   // Send AUX pack voltage
   UARTSendStr(UART7_BASE, auxVoltage, sizeof(auxVoltage));
@@ -936,10 +934,6 @@ void imuParse(char c) {
   }
 }
 
-// void UART_SendComma()
-//{
-//	UARTSend(",", 1);
-// }
 
 void TIMER1A_IRQHandler() {
   // Clear the timer interrupt.
