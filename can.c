@@ -1,3 +1,11 @@
+/*
+ * can.c
+ *
+ *  Created on: Jan 30, 2023
+ *      Author: Molly Shear
+ *              Mason DiGiorgio
+ */
+
 #include "can.h"
 // ID of each CAN message
 // Byte the message starts at (out of 8)

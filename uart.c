@@ -3,6 +3,7 @@
  *
  *  Created on: Jan 31, 2023
  *      Author: Molly Shear
+ *              Mason DiGiorgio
  */
 
 #include "uart.h"
