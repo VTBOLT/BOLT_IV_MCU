@@ -108,7 +108,6 @@ typedef enum ignitState { IGNIT_OFF = 0, IGNIT_ON = 1 } ignitState_t;
 #define REQSECCOUNT 360000000
 
 // Function prototypes
-// void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count);
 void UARTSendChar(uint32_t, const char);
 void UARTSendCharNonBlocking(uint32_t, const char);
 void UARTSendStr(uint32_t, const uint8_t*, uint32_t);
@@ -518,20 +517,6 @@ void UARTSendChar(uint32_t UART_BASE, const char c) {
   MAP_UARTCharPut(UART_BASE, c);
 }
 
-// void UARTSend(const uint8_t *pui8Buffer, uint32_t ui32Count)
-//{
-//     //
-//     // Loop while there are more characters to send.
-//     //
-//     while(ui32Count--)
-//     {
-//         //
-//         // Write the next character to the UART.
-//         //
-//         MAP_UARTCharPut(UART7_BASE, *pui8Buffer++);
-//     }
-// }
-
 void ADCSetup() {
   /* AUX ADC SETUP - built using adc0_singleended_singlechannel_singleseq */
 
@@ -777,9 +762,6 @@ void xbeeTransmit(CANTransmitData_t CANData, IMUTransmitData_t IMUData,
   UARTSendChar(UART7_BASE, ',');
   UARTSendStr(UART7_BASE, CANData.motorCtrlTemp, sizeof(CANData.motorCtrlTemp));
   UARTSendChar(UART7_BASE, ',');
-
-  // Send Pump Voltage
-  // UARTSend(pumpVoltage, sizeof(pumpVoltage));
 
   // Send AUX pack voltage
   UARTSendStr(UART7_BASE, auxVoltage, sizeof(auxVoltage));
