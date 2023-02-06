@@ -24,7 +24,7 @@
 								<listOptionValue builtIn="false" value="LINKER_COMMAND_FILE=msp432e401y.cmd"/>
 								<listOptionValue builtIn="false" value="RUNTIME_SUPPORT_LIBRARY=libc.a"/>
 								<listOptionValue builtIn="false" value="OUTPUT_TYPE=executable"/>
-								<listOptionValue builtIn="false" value="PRODUCTS=com.ti.SIMPLELINK_MSP432E4_SDK:2.30.0.14;"/>
+								<listOptionValue builtIn="false" value="PRODUCTS=com.ti.SIMPLELINK_MSP432E4_SDK:4.20.0.12;"/>
 								<listOptionValue builtIn="false" value="PRODUCT_MACRO_IMPORTS={&quot;com.ti.SIMPLELINK_MSP432E4_SDK&quot;:[&quot;${COM_TI_SIMPLELINK_MSP432E4_SDK_INCLUDE_PATH}&quot;,&quot;${COM_TI_SIMPLELINK_MSP432E4_SDK_LIBRARY_PATH}&quot;,&quot;${COM_TI_SIMPLELINK_MSP432E4_SDK_LIBRARIES}&quot;,&quot;${COM_TI_SIMPLELINK_MSP432E4_SDK_SYMBOLS}&quot;,&quot;${COM_TI_SIMPLELINK_MSP432E4_SDK_SYSCONFIG_MANIFEST}&quot;]}"/>
 							</option>
 							<option id="com.ti.ccstudio.buildDefinitions.core.OPT_CODEGEN_VERSION.179475511" name="Compiler version" superClass="com.ti.ccstudio.buildDefinitions.core.OPT_CODEGEN_VERSION" value="18.1.3.LTS" valueType="string"/>

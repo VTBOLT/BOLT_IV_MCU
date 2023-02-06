@@ -195,7 +195,7 @@ void canReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANdata,
 // This function can handle signed and unsigned from -32767 to +32767
 void convertToASCII(uint8_t* chars, uint8_t digits, int32_t num);
 void enableUARTprintf();
-void initTimers();
+void initTimers(uint32_t sysClock);
 void TIMER1A_IRQHandler();
 void UART6_IRQHandler(void);
 void xbeeTransmit(CANTransmitData_t, IMUTransmitData_t, uint8_t*, uint8_t*);
