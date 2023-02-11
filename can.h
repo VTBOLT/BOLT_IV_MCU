@@ -23,7 +23,7 @@
 #define lowTempByte 2
 #define tempLength 5
 
-#define auxVoltageID 0x700
+#define auxVoltageID 0x008
 #define auxVoltageLength 4
 
 #define motorTempID 0x0A2
@@ -52,20 +52,20 @@
 #define RPM_BYTE 2
 #define RPM_LEN 6  // due to possible negative, will have leading 0 if positive
 
-/* CAN variables */
+// CAN variables
 extern bool rxMsg;
 extern bool errFlag;
 extern uint32_t msgCount;
 
-// CAN data struct
-typedef struct {  // Multiplication factors (units) from the BMS utility manual
-  uint8_t SOC[SOC_length];       // 0.5 (%)
-  uint8_t FPV[FPV_length];       // 0.1 (V)
-  uint8_t highTemp[tempLength];  // 1 (degrees C) (BOLT3 data indicates 0.1)
-  uint8_t lowTemp[tempLength];   // 1 (degrees C) (BOLT3 data indicates 0.1)
-  uint8_t highVoltage[voltageLength];  // 0.0001 (V)
-  uint8_t lowVoltage[voltageLength];   // 0.0001 (V)
-  uint8_t RPM[RPM_LEN];                // 1 (rpm)
+// CAN message data struct
+typedef struct {                        // Multiplication factors (units) from the BMS utility manual
+  uint8_t SOC[SOC_length];              // 0.5 (%)
+  uint8_t FPV[FPV_length];              // 0.1 (V)
+  uint8_t highTemp[tempLength];         // 1 (degrees C) (BOLT3 data indicates 0.1)
+  uint8_t lowTemp[tempLength];          // 1 (degrees C) (BOLT3 data indicates 0.1)
+  uint8_t highVoltage[voltageLength];   // 0.0001 (V)
+  uint8_t lowVoltage[voltageLength];    // 0.0001 (V)
+  uint8_t RPM[RPM_LEN];                 // 1 (rpm)
   uint8_t motorTemp[motorTempLength];
   uint8_t motorCtrlTemp[motorCtrlTempLen];
   uint8_t motorTorque[motorTorqueLen];
@@ -73,8 +73,8 @@ typedef struct {  // Multiplication factors (units) from the BMS utility manual
 } CANTransmitData_t;
 
 void CANSendData(int id, int data);  // send AUX battery voltage over CAN
-void CANSetup(tCANMsgObject* message);
-void configureCAN();
+void CANSetup(tCANMsgObject* message); //
+void configureCAN();                    // set up
 void CANReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANdata,
                 uint8_t msgDataIndex, uint8_t* msgData);
 void CAN0_IRQHandler(void);

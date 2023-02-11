@@ -88,13 +88,13 @@ void CANSendData(int id, int data) {
   MAP_CANMessageSet(CAN0_BASE, 1, &message, MSG_OBJ_TYPE_TX);
 }
 
+/* Initializing the CAN variables */
 void CANSetup(tCANMsgObject* message) {
   /* Enable the clock to the GPIO Port J and wait for it to be ready */
   MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
   while (!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA))) {
   }
 
-  /* Initialize the CAN */
   configureCAN();
 
   /* Initialize message object 1 to be able to receive any CAN message ID.
@@ -115,8 +115,9 @@ void CANSetup(tCANMsgObject* message) {
   MAP_CANMessageSet(CAN0_BASE, 1, message, MSG_OBJ_TYPE_RX);
 }
 
+
+/* Configure the CAN and its pins PA0 and PA1 @ 500Kbps */
 void configureCAN(uint32_t systemClock) {
-  /* Configure the CAN and its pins PA0 and PA1 @ 500Kbps */
 
   /* Enable the clock to the GPIO Port A and wait for it to be ready */
   MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
@@ -141,7 +142,7 @@ void configureCAN(uint32_t systemClock) {
   /* Initialize the CAN controller */
   MAP_CANInit(CAN0_BASE);
 
-  /* Set up the bit rate for the CAN bus.  CAN bus is set to 500 Kbps */
+  /* Set up the bit rate for the CAN bus. CAN bus is set to 500 Kbps */
   MAP_CANBitRateSet(CAN0_BASE, systemClock, 250000);
 
   /* Enable interrupts on the CAN peripheral */
@@ -154,6 +155,8 @@ void configureCAN(uint32_t systemClock) {
   MAP_CANEnable(CAN0_BASE);
 }
 
+
+/* Receives CAN messages and sets variables accordingly */
 void CANReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData,
                 uint8_t msgDataIndex, uint8_t* msgData) {
   uint8_t cycleMsgs = 0;
@@ -278,6 +281,7 @@ void CANReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData,
     }
   }
 }
+
 
 // Safe To Delete
 void CAN0_IRQHandler() {  // Uses CAN0, on J5
