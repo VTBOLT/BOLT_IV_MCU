@@ -14,4 +14,3 @@ void UARTSendStrNonBlocking(uint32_t, const uint8_t*, uint32_t);
 void UART7Setup(uint32_t);
 void UART6Setup(uint32_t);
 void enableUARTprintf(uint32_t);
-void UART6_IRQHandler(void);

@@ -118,6 +118,7 @@ bool ignitDebounce(bool, uint32_t*, uint8_t*);
 bool ignitPoll(void);
 bool accPoll(void);
 bool DEPoll(void);
+void UART6_IRQHandler(void);
 // This function can handle signed and unsigned from -32767 to +32767
 void convertToASCII(uint8_t* chars, uint8_t digits, int32_t num);
 void initTimers();
@@ -475,6 +476,29 @@ bool DEPoll(void) {
   }
 }
 
+// Handles interrupts by reading in data from UART
+void UART6_IRQHandler(void) {
+  // UARTprintf("Entered UART6 ISR\n");
+  uint32_t ui32Status;
+
+  // Get the interrupt status.
+  ui32Status = MAP_UARTIntStatus(UART6_BASE, true);
+
+  //
+  // Clear the asserted interrupts.
+  //
+  MAP_UARTIntClear(UART6_BASE, ui32Status);
+
+  //
+  // Loop while there are characters in the receive FIFO.
+  //
+  while (MAP_UARTCharsAvail(UART6_BASE)) {
+    char c = MAP_UARTCharGetNonBlocking(UART6_BASE);
+    // UARTprintf(c);
+    // MAP_UARTCharPutNonBlocking(UART0_BASE, c);
+    imuParse(c);
+  }
+}
 
 void ADCSetup() {
   /* AUX ADC SETUP - built using adc0_singleended_singlechannel_singleseq */

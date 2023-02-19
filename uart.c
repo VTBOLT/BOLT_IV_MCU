@@ -7,42 +7,40 @@
  */
 
 #include "uart.h"
+#include "uartstdio.h"
 
-
+// sends a character through UART
+// MAYBE DELETE
 void UARTSendChar(uint32_t UART_BASE, const char c) {
   MAP_UARTCharPut(UART_BASE, c);
 }
 
+// sends a character without blocking through UART
 void UARTSendCharNonBlocking(uint32_t UART_BASE, const char c) {
   MAP_UARTCharPutNonBlocking(UART_BASE, c);
 }
 
+// sends a string through UART
 void UARTSendStr(uint32_t UART_BASE, const uint8_t* pui8Buffer,
                  uint32_t ui32Count) {
-  //
   // Loop while there are more characters to send.
-  //
   while (ui32Count--) {
-    //
     // Write the next character to the UART.
-    //
     MAP_UARTCharPut(UART_BASE, *pui8Buffer++);
   }
 }
 
+// sends a string without blocking through UART
 void UARTSendStrNonBlocking(uint32_t UART_BASE, const uint8_t* pui8Buffer,
                             uint32_t ui32Count) {
-  //
   // Loop while there are more characters to send.
-  //
   while (ui32Count--) {
-    //
     // Write the next character to the UART.
-    //
     MAP_UARTCharPutNonBlocking(UART_BASE, *pui8Buffer++);
   }
 }
 
+// set up UART 6
 void UART6Setup(uint32_t systemClock) {
   /* UART Transmit Setup */
 
@@ -64,6 +62,7 @@ void UART6Setup(uint32_t systemClock) {
   MAP_UARTIntEnable(UART6_BASE, UART_INT_RX | UART_INT_RT);
 }
 
+// set up UART 7
 void UART7Setup(uint32_t systemClock) {
   /* UART Transmit Setup */
 
@@ -82,6 +81,7 @@ void UART7Setup(uint32_t systemClock) {
       UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE);
 }
 
+// enables printing over UART
 void enableUARTprintf(uint32_t systemClock) {
   /* Enable the GPIO Peripheral used by the UART */
   MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
@@ -100,27 +100,3 @@ void enableUARTprintf(uint32_t systemClock) {
   UARTStdioConfig(2, 115200, systemClock);
 }
 
-void UART6_IRQHandler(void) {
-  // UARTprintf("Entered UART6 ISR\n");
-  uint32_t ui32Status;
-
-  //
-  // Get the interrrupt status.
-  //
-  ui32Status = MAP_UARTIntStatus(UART6_BASE, true);
-
-  //
-  // Clear the asserted interrupts.
-  //
-  MAP_UARTIntClear(UART6_BASE, ui32Status);
-
-  //
-  // Loop while there are characters in the receive FIFO.
-  //
-  while (MAP_UARTCharsAvail(UART6_BASE)) {
-    char c = MAP_UARTCharGetNonBlocking(UART6_BASE);
-    // UARTprintf(c);
-    // MAP_UARTCharPutNonBlocking(UART0_BASE, c);
-    imuParse(c);
-  }
-}
