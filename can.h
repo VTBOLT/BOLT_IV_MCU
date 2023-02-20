@@ -5,6 +5,9 @@
 #include <string.h>
 #include <ti/devices/msp432e4/driverlib/driverlib.h>
 
+#include "helper.h"
+#include "uart.h"
+
 // ID of each CAN message
 // Byte the message starts at (out of 8)
 // ASCII length of data (1 data bytes -> 3 ASCII bytes, 2 data bytes -> 5 ASCII
