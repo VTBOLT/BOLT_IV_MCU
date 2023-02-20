@@ -43,6 +43,7 @@
 #include "can.h"
 #include "uart.h"
 #include "uartstdio.h"
+#include "helper.h"
 
 #define UART_2_EN
 // #define XBEE_PLACEHOLDER_DATA
@@ -646,20 +647,6 @@ void timerRun() {
 
   // Wait for 3 seconds to have the timer delay the system
   while (MAP_TimerValueGet(TIMER0_BASE, TIMER_A) != REQSECCOUNT) {
-  }
-}
-
-void convertToASCII(uint8_t* chars, uint8_t digits, int32_t num) {
-  uint8_t STOP = 0;
-  if (num < 0) {
-    chars[0] = '-';
-    STOP = 1;
-  }
-  num = (uint16_t)abs(num);
-
-  for (; digits > STOP; digits--) {
-    chars[digits - 1] = num % 10 + '0';
-    num /= 10;
   }
 }
 

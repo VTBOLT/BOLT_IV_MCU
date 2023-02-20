@@ -8,6 +8,7 @@
 
 #include "can.h"
 
+
 /* CAN variables */
 bool rxMsg = false;
 bool errFlag = false;
@@ -16,10 +17,9 @@ uint32_t msgCount = 0;
 // Takes in id of voltage and the current voltage and sends the voltage value
 // over CAN
 void CANSendData(int id, int data) {
-  uint32_t dataLength = strlen(data);
   uint8_t msgData[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
   // UARTprintf("Length is %d \n", dataLength);
-  int i;
+  // int i;
 
   msgData[6] = data >> 8;
   msgData[7] = data;
@@ -142,7 +142,7 @@ void CANReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData,
           UARTprintf("0x%02X ", msgData[msgDataIndex]);
       }
 
-      /* Print the count of message sent
+      // Print the count of message sent //
       UARTprintf(" total count = %u\n", msgCount);*/
 
       static uint8_t SOCtemp = 20;

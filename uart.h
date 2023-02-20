@@ -5,6 +5,8 @@
 #include <string.h>
 #include <ti/devices/msp432e4/driverlib/driverlib.h>
 
+#include "uartstdio.h"
+
 #define IMU_RECEIVE_BAUD 57600
 
 void UARTSendChar(uint32_t, const char);

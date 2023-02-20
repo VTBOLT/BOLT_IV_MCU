@@ -7,7 +7,6 @@
  */
 
 #include "uart.h"
-#include "uartstdio.h"
 
 // sends a character through UART
 // MAYBE DELETE
