@@ -127,6 +127,8 @@ void TIMER1A_IRQHandler();
 void xbeeTransmit(CANTransmitData_t, IMUTransmitData_t, uint8_t*, uint8_t*);
 void imuParse(char c);
 
+
+/*The main loop that controls everything */
 int main(void) {
   /* Configure system clock for 120 MHz */
   systemClock = MAP_SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ | SYSCTL_OSC_MAIN |
@@ -323,6 +325,8 @@ int main(void) {
   }
 }
 
+
+/* Sets up pins for acceleration, ignition, and discharge enable */
 void accIgnDESetup(void) {
   // ACC K6, IGN K7, PSI M2
   /* Enables pins for ACC Tx/Rx, IGN Tx/Rx, ACC/IGN relays and reading from BMS
@@ -401,6 +405,8 @@ void accIgnDESetup(void) {
   GPIOM->PUR |= GPIO_PIN_1;
 }
 
+
+/* Checks the value of the acc pin */
 bool accPoll(void) {
   /* Return TRUE if acc Rx reads HIGH and FALSE if acc Rx reads LOW.
      As a note: ACC Rx: PH1, ACC Relay: PK4 */
@@ -412,6 +418,8 @@ bool accPoll(void) {
   }
 }
 
+
+/* Debounce the ignition */
 bool ignitDebounce(bool btn, uint32_t* count, uint8_t* flag) {
   static ignitState_t ignitState = IGNIT_OFF;
   static uint32_t bounceCount =
@@ -451,6 +459,8 @@ bool ignitDebounce(bool btn, uint32_t* count, uint8_t* flag) {
   return ignitState;
 }
 
+
+/* Check value of ignition switch */
 bool ignitPoll(void) {
   /* Return TRUE if ignition Rx reads HIGH and FALSE if ignition Rx reads LOW
      As a note: IGN Rx: PP3, IGN Relay: PH0 */
@@ -464,10 +474,10 @@ bool ignitPoll(void) {
                        &debounceCounter, &intTimer1_flag);
 }
 
-bool DEPoll(void) {
-  /* Poll if the bike is able to be discharged.
-     Return TRUE if so, return FALSE otherwise. */
 
+/* Poll if the bike is able to be discharged.
+     Return TRUE if so, return FALSE otherwise. */
+bool DEPoll(void) {
   /* DE is read from PM1. Pull-up resistor is enabled on PM1 since
      the BMS grounds PM1 when the bike can discharge. */
   if (MAP_GPIOPinRead(GPIO_PORTM_BASE, GPIO_PIN_1) == GPIO_PIN_1) {
@@ -477,30 +487,7 @@ bool DEPoll(void) {
   }
 }
 
-// Handles interrupts by reading in data from UART
-void UART6_IRQHandler(void) {
-  // UARTprintf("Entered UART6 ISR\n");
-  uint32_t ui32Status;
-
-  // Get the interrupt status.
-  ui32Status = MAP_UARTIntStatus(UART6_BASE, true);
-
-  //
-  // Clear the asserted interrupts.
-  //
-  MAP_UARTIntClear(UART6_BASE, ui32Status);
-
-  //
-  // Loop while there are characters in the receive FIFO.
-  //
-  while (MAP_UARTCharsAvail(UART6_BASE)) {
-    char c = MAP_UARTCharGetNonBlocking(UART6_BASE);
-    // UARTprintf(c);
-    // MAP_UARTCharPutNonBlocking(UART0_BASE, c);
-    imuParse(c);
-  }
-}
-
+/* Setup pins for measuring analog inputs */
 void ADCSetup() {
   /* AUX ADC SETUP - built using adc0_singleended_singlechannel_singleseq */
 
@@ -542,6 +529,8 @@ void ADCSetup() {
   MAP_ADCIntClear(ADC1_BASE, 3);
 }
 
+
+/* Convert the battery voltage to 4 digit number without decimal point */
 uint32_t auxADCSend(uint32_t* auxBatVoltage) {
   /* BUG
    * @ 12 V in, this function outputs 1120 (11.2V)
@@ -605,6 +594,8 @@ uint32_t auxADCSend(uint32_t* auxBatVoltage) {
   return compareVoltage;
 }
 
+
+/* Get the voltage from the pump */
 uint32_t pumpADCSend(uint32_t* pumpVoltage) {
   /* AUX ADC */
   MAP_ADCProcessorTrigger(ADC1_BASE, 3);
@@ -615,6 +606,8 @@ uint32_t pumpADCSend(uint32_t* pumpVoltage) {
   return pumpVoltage[0];
 }
 
+
+/* Initialize the timer peripherals on the board */
 void initTimers(uint32_t sysClock) {
   // Enable the peripherals used by this example.
   MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER1);
@@ -631,6 +624,8 @@ void initTimers(uint32_t sysClock) {
   MAP_TimerEnable(TIMER1_BASE, TIMER_A);
 }
 
+
+/* Setup the timer */
 void timerSetup() {
   // Set the 32-bit timer Peripheral.
   MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER0);
@@ -638,6 +633,8 @@ void timerSetup() {
   MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_ONE_SHOT);
 }
 
+
+/* Start up the timers */
 void timerRun() {
   // Load the required second count into the timer.
   MAP_TimerLoadSet(TIMER0_BASE, TIMER_A, REQSECCOUNT);
@@ -650,6 +647,8 @@ void timerRun() {
   }
 }
 
+
+/* Send data to xbee */
 void xbeeTransmit(CANTransmitData_t CANData, IMUTransmitData_t IMUData,
                   uint8_t* pumpVoltage, uint8_t* auxVoltage) {
   // Send CAN Data
@@ -698,6 +697,8 @@ void xbeeTransmit(CANTransmitData_t CANData, IMUTransmitData_t IMUData,
   UARTSendStr(UART7_BASE, IMUData.pitch, sizeof(IMUData.pitch));
 }
 
+
+/* Make sense of data received from imu and set related variables */
 void imuParse(char c) {
 #define DEFAULT 0
   enum {
@@ -830,6 +831,7 @@ void imuParse(char c) {
 }
 
 
+/* Handles timer interrupts */
 void TIMER1A_IRQHandler() {
   // Clear the timer interrupt.
   intTimer1_flag = 1;
@@ -856,3 +858,28 @@ void TIMER1A_IRQHandler() {
   msCount++;
   CANCount++;
 }
+
+/* Handles UART interrupts by reading in data from UART */
+void UART6_IRQHandler(void) {
+  // UARTprintf("Entered UART6 ISR\n");
+  uint32_t ui32Status;
+
+  // Get the interrupt status.
+  ui32Status = MAP_UARTIntStatus(UART6_BASE, true);
+
+  //
+  // Clear the asserted interrupts.
+  //
+  MAP_UARTIntClear(UART6_BASE, ui32Status);
+
+  //
+  // Loop while there are characters in the receive FIFO.
+  //
+  while (MAP_UARTCharsAvail(UART6_BASE)) {
+    char c = MAP_UARTCharGetNonBlocking(UART6_BASE);
+    // UARTprintf(c);
+    // MAP_UARTCharPutNonBlocking(UART0_BASE, c);
+    imuParse(c);
+  }
+}
+
