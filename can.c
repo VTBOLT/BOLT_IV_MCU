@@ -7,52 +7,6 @@
  */
 
 #include "can.h"
-// ID of each CAN message
-// Byte the message starts at (out of 8)
-// ASCII length of data (1 data bytes -> 3 ASCII bytes, 2 data bytes -> 5 ASCII
-// bytes)
-#define SOC_ID 0x6B0
-#define SOC_byte 4
-#define SOC_length 3
-
-#define FPV_ID 0x6B0
-#define FPV_byte 2
-#define FPV_length 5
-
-#define highTempID 0x6B4
-#define highTempByte 0
-#define lowTempID 0x6B4
-#define lowTempByte 2
-#define tempLength 5
-
-#define auxVoltageID 0x700
-#define auxVoltageLength 4
-
-#define motorTempID 0x0A2
-#define motorTempByte 0
-#define motorCtrlTempID 0x0A0
-#define motorCtrlTempByte 6
-#define motorTempLength 6  // Motor temperature ranges from -3276.8 to +3276.7 C
-#define motorCtrlTempLen 6
-
-#define dcBusCurrentID 0x0A6
-#define dcBusCurrentByte 6
-#define dcBusCurrentLen 6  // DC Bus current ranges from -3276.8 to +3276.7 Amps
-
-#define motorTorqueID 0x0AC
-#define motorTorqueByte 0
-#define motorTorqueLen 6  // Motor torque ranges from -3276.8 to +3276.7 N-m
-
-#define highVoltageID 0x6B3
-#define highVoltageByte 2
-#define lowVoltageID 0x6B3
-#define lowVoltageByte 4
-#define voltageLength 5
-#define imuLength 9
-
-#define RPM_ID 0x0A5
-#define RPM_BYTE 2
-#define RPM_LEN 6  // due to possible negative, will have leading 0 if positive
 
 /* CAN variables */
 bool rxMsg = false;
