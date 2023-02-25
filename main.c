@@ -41,9 +41,9 @@
 #include <ti/devices/msp432e4/driverlib/driverlib.h>
 
 #include "can.h"
+#include "helper.h"
 #include "uart.h"
 #include "uartstdio.h"
-#include "helper.h"
 
 #define UART_2_EN
 // #define XBEE_PLACEHOLDER_DATA
@@ -127,7 +127,6 @@ void TIMER1A_IRQHandler();
 void xbeeTransmit(CANTransmitData_t, IMUTransmitData_t, uint8_t*, uint8_t*);
 void imuParse(char c);
 
-
 /*The main loop that controls everything */
 int main(void) {
   /* Configure system clock for 120 MHz */
@@ -202,7 +201,8 @@ int main(void) {
 
     // As long as the PCB is on, CAN should be read
     if (g_ui8canFlag) {
-      CANSendData(31, auxADCSend(auxBatVoltage));
+      UARTprintf("Sending data\n");
+      CANSendData(auxVoltageID, auxADCSend(auxBatVoltage));
       CANReceive(&sCANMessage, &CANData, msgDataIndex, msgData);
       g_ui8canFlag = 0;
       // UARTprintf("Compare value: %i\n", auxADCSend(auxBatVoltage));
@@ -325,7 +325,6 @@ int main(void) {
   }
 }
 
-
 /* Sets up pins for acceleration, ignition, and discharge enable */
 void accIgnDESetup(void) {
   // ACC K6, IGN K7, PSI M2
@@ -405,7 +404,6 @@ void accIgnDESetup(void) {
   GPIOM->PUR |= GPIO_PIN_1;
 }
 
-
 /* Checks the value of the acc pin */
 bool accPoll(void) {
   /* Return TRUE if acc Rx reads HIGH and FALSE if acc Rx reads LOW.
@@ -417,7 +415,6 @@ bool accPoll(void) {
     return false;
   }
 }
-
 
 /* Debounce the ignition */
 bool ignitDebounce(bool btn, uint32_t* count, uint8_t* flag) {
@@ -459,7 +456,6 @@ bool ignitDebounce(bool btn, uint32_t* count, uint8_t* flag) {
   return ignitState;
 }
 
-
 /* Check value of ignition switch */
 bool ignitPoll(void) {
   /* Return TRUE if ignition Rx reads HIGH and FALSE if ignition Rx reads LOW
@@ -473,7 +469,6 @@ bool ignitPoll(void) {
   return ignitDebounce((bool)(MAP_GPIOPinRead(GPIO_PORTP_BASE, GPIO_PIN_3)),
                        &debounceCounter, &intTimer1_flag);
 }
-
 
 /* Poll if the bike is able to be discharged.
      Return TRUE if so, return FALSE otherwise. */
@@ -528,7 +523,6 @@ void ADCSetup() {
   MAP_ADCIntClear(ADC0_BASE, 3);
   MAP_ADCIntClear(ADC1_BASE, 3);
 }
-
 
 /* Convert the battery voltage to 4 digit number without decimal point */
 uint32_t auxADCSend(uint32_t* auxBatVoltage) {
@@ -594,7 +588,6 @@ uint32_t auxADCSend(uint32_t* auxBatVoltage) {
   return compareVoltage;
 }
 
-
 /* Get the voltage from the pump */
 uint32_t pumpADCSend(uint32_t* pumpVoltage) {
   /* AUX ADC */
@@ -605,7 +598,6 @@ uint32_t pumpADCSend(uint32_t* pumpVoltage) {
   MAP_ADCSequenceDataGet(ADC1_BASE, 3, pumpVoltage);
   return pumpVoltage[0];
 }
-
 
 /* Initialize the timer peripherals on the board */
 void initTimers(uint32_t sysClock) {
@@ -624,7 +616,6 @@ void initTimers(uint32_t sysClock) {
   MAP_TimerEnable(TIMER1_BASE, TIMER_A);
 }
 
-
 /* Setup the timer */
 void timerSetup() {
   // Set the 32-bit timer Peripheral.
@@ -632,7 +623,6 @@ void timerSetup() {
   // Configure the timer to be one-shot.
   MAP_TimerConfigure(TIMER0_BASE, TIMER_CFG_ONE_SHOT);
 }
-
 
 /* Start up the timers */
 void timerRun() {
@@ -646,7 +636,6 @@ void timerRun() {
   while (MAP_TimerValueGet(TIMER0_BASE, TIMER_A) != REQSECCOUNT) {
   }
 }
-
 
 /* Send data to xbee */
 void xbeeTransmit(CANTransmitData_t CANData, IMUTransmitData_t IMUData,
@@ -696,7 +685,6 @@ void xbeeTransmit(CANTransmitData_t CANData, IMUTransmitData_t IMUData,
   UARTSendChar(UART7_BASE, ',');
   UARTSendStr(UART7_BASE, IMUData.pitch, sizeof(IMUData.pitch));
 }
-
 
 /* Make sense of data received from imu and set related variables */
 void imuParse(char c) {
@@ -830,7 +818,6 @@ void imuParse(char c) {
   }
 }
 
-
 /* Handles timer interrupts */
 void TIMER1A_IRQHandler() {
   // Clear the timer interrupt.
@@ -838,7 +825,9 @@ void TIMER1A_IRQHandler() {
   MAP_TimerIntClear(TIMER1_BASE, TIMER_TIMA_TIMEOUT);
 
   // toggle LED every 0.05 seconds
+  //UARTprintf("%d\n", CANCount);
   if (CANCount >= 50) {
+    //UARTprintf("CAN!");
     g_ui8canFlag = 1;
     CANCount = 0;
   }
@@ -882,4 +871,3 @@ void UART6_IRQHandler(void) {
     imuParse(c);
   }
 }
-
