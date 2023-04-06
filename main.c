@@ -540,6 +540,7 @@ uint32_t auxADCSend(uint32_t* auxBatVoltage) {
   MAP_ADCSequenceDataGet(ADC0_BASE, 3, auxBatVoltage);
 
   float tempFloat = auxBatVoltage[0];
+  //UARTprintf("%d", (int)tempFloat);
 
   // From ((v/1000)/1.265)/.1904 - see spreadsheet
   // tempFloat *= 0.004719;
@@ -547,7 +548,7 @@ uint32_t auxADCSend(uint32_t* auxBatVoltage) {
   // uint32_t temp = tempFloat * 100;
   // uint32_t toReturn = temp;
 
-  uint32_t tempTrueVoltage = (tempFloat / 218.587) * 100;  // see spreadsheet
+  uint32_t tempTrueVoltage = (25.1 * (tempFloat / 4095)) * 100;  // see spreadsheet
   uint32_t compareVoltage = tempTrueVoltage;
 
   // UARTprintf("Raw Value: %i\n", auxBatVoltage[0]);

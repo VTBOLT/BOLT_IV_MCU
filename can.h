@@ -26,7 +26,7 @@
 #define lowTempByte 2
 #define tempLength 5
 
-#define auxVoltageID 0x008
+#define auxVoltageID 0x100
 #define auxVoltageLength 4
 
 #define motorTempID 0x0A2

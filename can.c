@@ -38,7 +38,7 @@ void CANSendData(int id, int data) {
   message.ui32Flags = MSG_OBJ_TX_INT_ENABLE;
   message.ui32MsgLen = sizeof(msgData);
   message.pui8MsgData = msgData;
-
+  //UARTprintf("%X:%X:%X:%X:%X:%X:%X:%X\n", msgData[0], msgData[1], msgData[2], msgData[3], msgData[4], msgData[5], msgData[6], msgData[7]);
   MAP_CANMessageSet(CAN0_BASE, 1, &message, MSG_OBJ_TYPE_TX);
 }
 
@@ -48,8 +48,6 @@ void CANSetup(tCANMsgObject* message) {
   MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
   while (!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA))) {
   }
-
-  configureCAN();
 
   /* Initialize message object 1 to be able to receive any CAN message ID.
    * In order to receive any CAN ID, the ID and mask must both be set to 0,
@@ -97,10 +95,12 @@ void configureCAN(uint32_t systemClock) {
   MAP_CANInit(CAN0_BASE);
 
   /* Set up the bit rate for the CAN bus. CAN bus is set to 500 Kbps */
-  MAP_CANBitRateSet(CAN0_BASE, systemClock, 250000);
+  MAP_CANBitRateSet(CAN0_BASE, systemClock, 500000);
 
   /* Enable interrupts on the CAN peripheral */
   MAP_CANIntEnable(CAN0_BASE, CAN_INT_MASTER | CAN_INT_ERROR | CAN_INT_STATUS);
+
+  MAP_CANRetrySet(CAN0_BASE, true);
 
   /* Enable the CAN interrupt */
   MAP_IntEnable(INT_CAN0);
@@ -237,7 +237,6 @@ void CANReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData,
 }
 
 
-// Safe To Delete
 void CAN0_IRQHandler() {  // Uses CAN0, on J5
   uint32_t canStatus;
 
@@ -252,13 +251,13 @@ void CAN0_IRQHandler() {  // Uses CAN0, on J5
 
     /* Set a flag to indicate some errors may have occurred */
     errFlag = true;
-    /*
-    UARTprintf("canStatus: %08X\n", canStatus);
 
-    uint32_t rxErr, txErr;
-    MAP_CANErrCntrGet(CAN0_BASE, &rxErr, &txErr);
-    UARTprintf("RX Error: %08X\n", rxErr);
-    UARTprintf("TX Error: %08X\n", txErr);*/
+//    UARTprintf("canStatus: %08X\n", canStatus);
+//
+//    uint32_t rxErr, txErr;
+//    MAP_CANErrCntrGet(CAN0_BASE, &rxErr, &txErr);
+//    UARTprintf("RX Error: %08X\n", rxErr);
+//    UARTprintf("TX Error: %08X\n", txErr);
   }
 
   /* Check if the cause is message object 1, which what we are using for
