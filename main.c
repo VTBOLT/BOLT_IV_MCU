@@ -139,7 +139,6 @@ int main(void) {
 
   // Instantiate CAN objects
   static CANTransmitData_t CANData;
-  tCANMsgObject sCANMessage;
   uint8_t msgDataIndex;
   uint8_t msgData[8] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 

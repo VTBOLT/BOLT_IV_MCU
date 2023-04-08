@@ -59,6 +59,7 @@
 extern bool rxMsg;
 extern bool errFlag;
 extern uint32_t msgCount;
+extern tCANMsgObject sCANMessage;
 
 // CAN message data struct
 typedef struct {                        // Multiplication factors (units) from the BMS utility manual

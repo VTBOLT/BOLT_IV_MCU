@@ -13,6 +13,7 @@
 bool rxMsg = false;
 bool errFlag = false;
 uint32_t msgCount = 0;
+tCANMsgObject sCANMessage;
 
 // Takes in id of voltage and the current voltage and sends the voltage value
 // over CAN
@@ -39,16 +40,11 @@ void CANSendData(int id, int data) {
   message.ui32MsgLen = sizeof(msgData);
   message.pui8MsgData = msgData;
   //UARTprintf("%X:%X:%X:%X:%X:%X:%X:%X\n", msgData[0], msgData[1], msgData[2], msgData[3], msgData[4], msgData[5], msgData[6], msgData[7]);
-  MAP_CANMessageSet(CAN0_BASE, 1, &message, MSG_OBJ_TYPE_TX);
+  MAP_CANMessageSet(CAN0_BASE, 2, &message, MSG_OBJ_TYPE_TX);
 }
 
 /* Initializing the CAN variables */
 void CANSetup(tCANMsgObject* message) {
-  /* Enable the clock to the GPIO Port J and wait for it to be ready */
-  MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
-  while (!(MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA))) {
-  }
-
   /* Initialize message object 1 to be able to receive any CAN message ID.
    * In order to receive any CAN ID, the ID and mask must both be set to 0,
    * and the ID filter enabled */
@@ -111,7 +107,7 @@ void configureCAN(uint32_t systemClock) {
 
 
 /* Receives CAN messages and sets variables accordingly */
-void CANReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData,
+void CANReceive(tCANMsgObject* message, CANTransmitData_t* CANData,
                 uint8_t msgDataIndex, uint8_t* msgData) {
   uint8_t cycleMsgs = 0;
   /* A new message is received */
@@ -121,29 +117,29 @@ void CANReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData,
     if (rxMsg) {
       /* Re-use the same message object that was used earlier to configure
        * the CAN */
-      sCANMessage->pui8MsgData = (uint8_t*)msgData;
+      message->pui8MsgData = (uint8_t*)msgData;
 
       /* Read the message from the CAN */
-      MAP_CANMessageGet(CAN0_BASE, 1, sCANMessage, 0);
+      MAP_CANMessageGet(CAN0_BASE, 1, message, 0);
 
       // Set rxMsg to false since data has been put into the object
       // The next message will stay in the buffer until CANMessageGet() is
       // called again
-      // The interrupt functi.on sets rxMsg to true to satisfy the if statement
+      // The interrupt function sets rxMsg to true to satisfy the if statement
       rxMsg = false;
 
-      /* Print a message to the console showing the message count and the
-       * contents of the received message
-      UARTprintf("Message length: %i \n", sCANMessage->ui32MsgLen);
-      UARTprintf("Received msg 0x%03X: ",sCANMessage->ui32MsgID);
-      for (msgDataIndex = 0; msgDataIndex < sCANMessage->ui32MsgLen;
-              msgDataIndex++)
+      // Print a message to the console showing the message count and the
+      // contents of the received message
+      /*UARTprintf("Message length: %d \n", message->ui32MsgLen);
+      UARTprintf("Received msg 0x%03X: ",message->ui32MsgID);
+      for (msgDataIndex = 0; msgDataIndex < message->ui32MsgLen; msgDataIndex++)
       {
           UARTprintf("0x%02X ", msgData[msgDataIndex]);
       }
 
       // Print the count of message sent //
-      UARTprintf(" total count = %u\n", msgCount);*/
+      UARTprintf(" total count = %u\n", msgCount);
+      */
 
       static uint8_t SOCtemp = 20;
       static uint16_t FPVtemp = 21;
@@ -158,49 +154,49 @@ void CANReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData,
       static uint16_t motorTorqueTemp = 30;
 
       // Populates the temporary variables
-      if (sCANMessage->ui32MsgID == highTempID) {
+      if (message->ui32MsgID == highTempID) {
         highTempTemp = (msgData[highTempByte + 1] << 8) | msgData[highTempByte];
       }
-      if (sCANMessage->ui32MsgID == lowTempID) {
+      if (message->ui32MsgID == lowTempID) {
         lowTempTemp = (msgData[lowTempByte + 1] << 8) | msgData[lowTempByte];
       }
-      if (sCANMessage->ui32MsgID == SOC_ID) {
+      if (message->ui32MsgID == SOC_ID) {
         SOCtemp = msgData[SOC_byte];
       }
-      if (sCANMessage->ui32MsgID == FPV_ID) {
+      if (message->ui32MsgID == FPV_ID) {
         FPVtemp = (msgData[FPV_byte + 1] << 8) | msgData[FPV_byte];
       }
-      if (sCANMessage->ui32MsgID == highVoltageID) {
+      if (message->ui32MsgID == highVoltageID) {
         highVoltTemp =
             (msgData[highVoltageByte + 1] << 8) | msgData[highVoltageByte];
       }
-      if (sCANMessage->ui32MsgID == lowVoltageID) {
+      if (message->ui32MsgID == lowVoltageID) {
         lowVoltTemp =
             (msgData[lowVoltageByte + 1] << 8) | msgData[lowVoltageByte];
       }
-      if (sCANMessage->ui32MsgID == RPM_ID) {
+      if (message->ui32MsgID == RPM_ID) {
         rpmTemp = (msgData[RPM_BYTE + 1] << 8) | msgData[RPM_BYTE];
       }
-      if (sCANMessage->ui32MsgID == motorTempID) {
+      if (message->ui32MsgID == motorTempID) {
         motorTempTemp =
             (msgData[motorTempByte + 1] << 8) | msgData[motorTempByte];
       }
-      if (sCANMessage->ui32MsgID == motorCtrlTempID) {
+      if (message->ui32MsgID == motorCtrlTempID) {
         motorCtrlTempTemp =
             (msgData[motorCtrlTempByte + 1] << 8) | msgData[motorCtrlTempByte];
       }
-      if (sCANMessage->ui32MsgID == motorTorqueID) {
+      if (message->ui32MsgID == motorTorqueID) {
         motorTorqueTemp =
             (msgData[motorTorqueByte + 1] << 8) | msgData[motorTorqueByte];
       }
-      if (sCANMessage->ui32MsgID == dcBusCurrentID) {
+      if (message->ui32MsgID == dcBusCurrentID) {
         dcBusCurrentTemp =
             (msgData[dcBusCurrentByte + 1] << 8) | msgData[dcBusCurrentByte];
       }
 
       /* Set ID to 0 so the next message can be received
        * May be unnecessary */
-      sCANMessage->ui32MsgID = 0;
+      message->ui32MsgID = 0;
 
       // Processes numbers into ASCII
       convertToASCII(CANData->SOC, 3, SOCtemp);
@@ -230,7 +226,7 @@ void CANReceive(tCANMsgObject* sCANMessage, CANTransmitData_t* CANData,
         else
         {
       if (errFlag) {
-        UARTprintf("Error: Problem while receiving CAN interrupt\n");
+        //UARTprintf("Error: Problem while receiving CAN interrupt\n");
       }
     }
   }
@@ -251,6 +247,9 @@ void CAN0_IRQHandler() {  // Uses CAN0, on J5
 
     /* Set a flag to indicate some errors may have occurred */
     errFlag = true;
+    if(canStatus == CAN_STATUS_TXOK){
+        CANSetup(&sCANMessage);
+    }
 
 //    UARTprintf("canStatus: %08X\n", canStatus);
 //
@@ -278,6 +277,13 @@ void CAN0_IRQHandler() {  // Uses CAN0, on J5
 
     /* Since the message was sent, clear any error flags */
     errFlag = false;
-  } else {
+  } else if (canStatus == 2){
+      /* Getting to this point means that the RX interrupt occurred on
+      * message object 1, and the message RX is complete.  Clear the
+       * message object interrupt */
+      MAP_CANIntClear(CAN0_BASE, 2);
+
+      /* Since the message was sent, clear any error flags */
+      errFlag = false;
   }
 }
